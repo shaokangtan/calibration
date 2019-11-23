@@ -6,7 +6,7 @@ from pyqtgraph.dockarea import *
 from pyqtgraph.Qt import QtCore, QtGui
 from PyQt5.QtWidgets import *
 from PyQt5.Qt import *
-import pyqtgraph.console
+from  pyqtgraph.console import ConsoleWidget
 import numpy as np
 import imutils
 import getopt
@@ -43,19 +43,9 @@ class CalibrationView(QMainWindow):
 
         self.area.addDock(self.dk_page, 'right')
         self.area.addDock(self.dk_template, 'bottom', self.dk_page)
-        self.area.addDock(self.dk_info, 'right', self.dk_template)
-        self.area.addDock(self.dk_control, 'right', self.dk_info)
+        self.area.addDock(self.dk_control, 'right', self.dk_template)
+        self.area.addDock(self.dk_info, 'right', self.dk_control)
 
-        # self.widget_frame = pg.PlotWidget()
-        # self.widget_frame.setAspectLocked("xy")
-        # self.dk_page.addWidget(self.widget_frame)
-        # img_rgb = asarray(cv2.imread(pages[0]))
-        # self.image = pg.ImageItem(img_rgb, axisOrder='row-major')
-        #
-        # self.widget_frame.addItem(self.image )
-        # self.image.getViewBox().invertY(True)
-        # self.widget_frame.removeItem(self.image )
-        # self.widget_frame.addItem(self.image)
 
         # page
         img_rgb = asarray(cv2.imread(pages[0]))
@@ -69,12 +59,8 @@ class CalibrationView(QMainWindow):
         self.dk_template.addWidget(self.image_view)
         # info
         self.widget_info = pg.LayoutWidget()
-        self.label_info = QLabel("""Frame meta data""")
-        self.label_info.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.scroll_area = QScrollArea(parent)
-        self.scroll_area.setWidget(self.label_info)
-        self.scroll_area.setWidgetResizable(True)
-        self.dk_info.addWidget(self.scroll_area, row=0, col=0)
+        self.console = ConsoleWidget()
+        self.dk_info.addWidget(self.console)
 
         # control
         self.label_page = QLabel("Page:")
@@ -103,22 +89,22 @@ class CalibrationView(QMainWindow):
         self.cb_export = QCheckBox('Export', self)
 
         self.dk_control.addWidget(self.label_page, row=0, col=0)
-        self.dk_control.addWidget(self.cb_page, row=0, col=1, colspan=16)
+        self.dk_control.addWidget(self.cb_page, row=0, col=1, colspan=4)
         self.dk_control.addWidget(self.label_template, row=1, col=0)
-        self.dk_control.addWidget(self.cb_template, row=1, col=1, colspan=16)
+        self.dk_control.addWidget(self.cb_template, row=1, col=1, colspan=4)
 
         self.dk_control.addWidget(self.btn_run, row=2, col=0)
         self.dk_control.addWidget(self.btn_run_all, row=2, col=1)
-
-        self.dk_control.addWidget(self.btn_save_dockstn, row=2, col=2)
-        self.dk_control.addWidget(self.btn_restore_dock, row=2, col=3)
         self.dk_control.addWidget(self.cb_visual, row=3, col=0)
         self.dk_control.addWidget(self.cb_export, row=3, col=1)
+        self.dk_control.addWidget(self.btn_save_dockstn, row=2, col=2)
+        self.dk_control.addWidget(self.btn_restore_dock, row=2, col=3 )
 
         self.show()
 
     def run(self):
-        multi_scale_template_matching(self.image_item_page, self.image_item_template, self.cb_page.currentText(), self.cb_template.currentText(), True)
+        visualize = self.cb_visual.isChecked()
+        multi_scale_template_matching(self.image_item_page, self.image_item_template, self.cb_page.currentText(), self.cb_template.currentText(), self.console, visualize)
 
     def save(self):
         self.state = self.area.saveState()
@@ -135,7 +121,7 @@ class CalibrationView(QMainWindow):
         img_rgb = asarray(cv2.imread(self.pages[i]))
         self.image_item_page.setImage(img_rgb)
 
-def multi_scale_template_matching(image_item_page, image_tiem_template, page_file, template_file, visual=False):
+def multi_scale_template_matching(image_item_page, image_tiem_template, page_file, template_file, console, visual=False):
     template = cv2.imread(template_file)
     template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
     template_edge = cv2.Canny(template_gray, 50, 200)
@@ -172,9 +158,10 @@ def multi_scale_template_matching(image_item_page, image_tiem_template, page_fil
             # draw a bounding box around the detected region
             clone = np.dstack([edged, edged, edged])
             cv2.rectangle(clone, (maxLoc[0], maxLoc[1]),
-                          (maxLoc[0] + tW, maxLoc[1] + tH), (0, 0, 255), 2)
+                          (maxLoc[0] + tW, maxLoc[1] + tH), (255, 0, 0), 10)
             image_item_page.setImage(clone)
-            print("=== visual ===")
+            QtGui.QGuiApplication.processEvents()
+
             # cv2.waitKey(0)
 
         # if we have found a new maximum correlation value, then update
@@ -182,6 +169,7 @@ def multi_scale_template_matching(image_item_page, image_tiem_template, page_fil
         if found is None or maxVal > found[0]:
             found = (maxVal, maxLoc, r)
             print("image: {}, scale:{}, found: {}".format(page_file, scale, found))
+            console.write("image: {}, scale:{}, found: {}\n".format(page_file, scale, found))
 
 
     # unpack the bookkeeping variable and compute the (x, y) coordinates
@@ -190,9 +178,10 @@ def multi_scale_template_matching(image_item_page, image_tiem_template, page_fil
     (startX, startY) = (int(maxLoc[0] * r), int(maxLoc[1] * r))
     (endX, endY) = (int((maxLoc[0] + tW) * r), int((maxLoc[1] + tH) * r))
     print("image: {}, found: {}".format(page_file, found))
+    console.write("image: {}, found: {}\n".format(page_file, found))
 
     # draw a bounding box around the detected result and display the image
-    cv2.rectangle(image, (startX, startY), (endX, endY), (255, 0, 0), 4)
+    cv2.rectangle(image, (startX, startY), (endX, endY), (255, 0, 0), 10)
 
     image_item_page.setImage(image)
     image_tiem_template.setImage(template)

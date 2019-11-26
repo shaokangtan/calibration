@@ -1,6 +1,7 @@
 import sys
 import cv2
 import pyqtgraph as pg
+import pyqtgraph.exporters
 from numpy import asarray
 from pyqtgraph.dockarea import *
 from pyqtgraph.Qt import QtCore, QtGui
@@ -9,8 +10,10 @@ from PyQt5.Qt import *
 from  pyqtgraph.console import ConsoleWidget
 import numpy as np
 import imutils
+from PIL import Image
 import getopt
 import glob
+import ntpath
 
 
 
@@ -30,16 +33,16 @@ class CalibrationView(QMainWindow):
         self.verbose = verbose
         self.area = DockArea()
         self.setCentralWidget(self.area)
-        self.resize(1280, 900)
+        self.resize(1024, 900)
         self.setWindowTitle(title)
 
         ## Create docks, place them into the window one at a time.
         ## Note that size arguments are only a suggestion; docks will still have to
         ## fill the entire dock self.area and obey the limits of their internal widgets.
         self.dk_page = Dock("page", size=(1024, 720))  ## give this dock the minimum possible size
-        self.dk_template = Dock("template", size=(280, 280))
-        self.dk_info = Dock("info", size=(280, 280))
-        self.dk_control = Dock("command", size=(280, 280))
+        self.dk_template = Dock("template", size=(200, 280))
+        self.dk_control = Dock("command", size=(200, 280))
+        self.dk_info = Dock("info", size=(800, 280))
 
         self.area.addDock(self.dk_page, 'right')
         self.area.addDock(self.dk_template, 'bottom', self.dk_page)
@@ -52,11 +55,19 @@ class CalibrationView(QMainWindow):
         self.image_item_page = pg.ImageItem(img_rgb, axisOrder='row-major')
         self.image_view = pg.ImageView(imageItem=self.image_item_page)
         self.dk_page.addWidget(self.image_view)
+
+        # ROI
+        pen = pg.mkPen(width=2, color='g')
+        self.rect_roi = pg.RectROI([20, 20], [100, 100], pen=pen)
+        self.image_view.getView().addItem(self.rect_roi)
+        self.rect_roi.sigRegionChanged[object].connect(self.on_change_rect_roi)
+
         # template
         img_rgb = asarray(cv2.imread(templates[0]))
         self.image_item_template = pg.ImageItem(img_rgb, axisOrder='row-major')
         self.image_view = pg.ImageView(imageItem=self.image_item_template)
         self.dk_template.addWidget(self.image_view)
+
         # info
         self.widget_info = pg.LayoutWidget()
         self.console = ConsoleWidget()
@@ -81,24 +92,32 @@ class CalibrationView(QMainWindow):
         self.btn_save_dockstn.clicked.connect(self.save)
         self.btn_restore_dock.clicked.connect(self.load)
 
+        self.btn_load_pages = QPushButton('Load pages...')
+        self.btn_load_templates = QPushButton('Load templates...')
         self.btn_run = QPushButton('Run')
-        self.btn_run_all = QPushButton('Run all')
+        self.btn_run_all = QPushButton('Run all templates')
         self.btn_run.clicked.connect(self.run)
+        self.btn_run_all.clicked.connect(self.run_all)
+        self.btn_export_roi = QPushButton('Save ROI')
+        self.btn_export_roi.clicked.connect(self.on_export_rect_roi)
 
         self.cb_visual = QCheckBox('Visual', self)
         self.cb_export = QCheckBox('Export', self)
 
         self.dk_control.addWidget(self.label_page, row=0, col=0)
-        self.dk_control.addWidget(self.cb_page, row=0, col=1, colspan=4)
+        self.dk_control.addWidget(self.cb_page, row=0, col=1, colspan=3)
+        self.dk_control.addWidget(self.btn_load_pages, row=0, col=4)
         self.dk_control.addWidget(self.label_template, row=1, col=0)
-        self.dk_control.addWidget(self.cb_template, row=1, col=1, colspan=4)
+        self.dk_control.addWidget(self.cb_template, row=1, col=1, colspan=3)
+        self.dk_control.addWidget(self.btn_load_templates, row=1, col=4)
 
         self.dk_control.addWidget(self.btn_run, row=2, col=0)
         self.dk_control.addWidget(self.btn_run_all, row=2, col=1)
+        self.dk_control.addWidget(self.btn_export_roi, row=2, col=2)
         self.dk_control.addWidget(self.cb_visual, row=3, col=0)
         self.dk_control.addWidget(self.cb_export, row=3, col=1)
-        self.dk_control.addWidget(self.btn_save_dockstn, row=2, col=2)
-        self.dk_control.addWidget(self.btn_restore_dock, row=2, col=3 )
+        self.dk_control.addWidget(self.btn_save_dockstn, row=2, col=3)
+        self.dk_control.addWidget(self.btn_restore_dock, row=2, col=4 )
 
         self.show()
 
@@ -106,6 +125,29 @@ class CalibrationView(QMainWindow):
         visualize = self.cb_visual.isChecked()
         multi_scale_template_matching(self.image_item_page, self.image_item_template, self.cb_page.currentText(), self.cb_template.currentText(), self.console, visualize)
 
+    def run_all(self):
+        visualize = self.cb_visual.isChecked()
+        for template in self.templates:
+            multi_scale_template_matching(self.image_item_page, self.image_item_template, self.cb_page.currentText(), template, self.console, visualize)
+            time.sleep(3)
+
+    def on_change_rect_roi(self):
+        pass
+
+    def on_export_rect_roi(self):
+        print("roi pos: {}".format(self.rect_roi.pos()))
+        print("roi size: {}".format(self.rect_roi.size()))
+
+        im = Image.open(self.cb_page.currentText())
+        dim = (int(self.rect_roi.pos()[0]), int(self.rect_roi.pos()[1]), int(self.rect_roi.pos()[0] + self.rect_roi.size()[0]),
+               int(self.rect_roi.pos()[1] + self.rect_roi.size()[1]))
+        region = im.crop(dim)
+
+        name = ntpath.basename(self.cb_page.currentText()).strip(".png")
+        region.save("{}_{}_{}_{}_{}.png".format(name,
+                                                int(self.rect_roi.pos()[0]), int(self.rect_roi.pos()[1]),
+                                                int(self.rect_roi.pos()[0] + self.rect_roi.size()[0]),
+                                                int(self.rect_roi.pos()[1] + self.rect_roi.size()[1])))
     def save(self):
         self.state = self.area.saveState()
         self.btn_restore_dock.setEnabled(True)
@@ -158,7 +200,7 @@ def multi_scale_template_matching(image_item_page, image_tiem_template, page_fil
             # draw a bounding box around the detected region
             clone = np.dstack([edged, edged, edged])
             cv2.rectangle(clone, (maxLoc[0], maxLoc[1]),
-                          (maxLoc[0] + tW, maxLoc[1] + tH), (255, 0, 0), 10)
+                          (maxLoc[0] + tW, maxLoc[1] + tH), (255, 0, 0), 20)
             image_item_page.setImage(clone)
             QtGui.QGuiApplication.processEvents()
 
@@ -168,7 +210,7 @@ def multi_scale_template_matching(image_item_page, image_tiem_template, page_fil
         # the bookkeeping variable
         if found is None or maxVal > found[0]:
             found = (maxVal, maxLoc, r)
-            print("image: {}, scale:{}, found: {}".format(page_file, scale, found))
+            print("{}:  {}".format(page_file, found))
             console.write("image: {}, scale:{}, found: {}\n".format(page_file, scale, found))
 
 
@@ -177,18 +219,16 @@ def multi_scale_template_matching(image_item_page, image_tiem_template, page_fil
     (_, maxLoc, r) = found
     (startX, startY) = (int(maxLoc[0] * r), int(maxLoc[1] * r))
     (endX, endY) = (int((maxLoc[0] + tW) * r), int((maxLoc[1] + tH) * r))
-    print("image: {}, found: {}".format(page_file, found))
-    console.write("image: {}, found: {}\n".format(page_file, found))
+    print("{}: found: {}".format(page_file, found))
+    console.write("{}: {}\n".format(page_file, found))
 
     # draw a bounding box around the detected result and display the image
-    cv2.rectangle(image, (startX, startY), (endX, endY), (255, 0, 0), 10)
+    cv2.rectangle(image, (startX, startY), (endX, endY), (255, 0, 0), 20)
 
     image_item_page.setImage(image)
     image_tiem_template.setImage(template)
+    QtGui.QGuiApplication.processEvents()
 
-
-    # cv2.namedWindow("Image", CV_WINDOW_NORMAL)
-    #cv2.waitKey(0)
 
 
 

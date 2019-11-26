@@ -28,8 +28,8 @@ class CalibrationView(QMainWindow):
         if len(pages) == 0 or len(templates) == 0:
             print("error: no pages/templates loaded")
             return None
-        self.pages = pages
-        self.templates = templates
+        self.pages = list(pages)
+        self.templates = list(templates)
         self.verbose = verbose
         self.area = DockArea()
         self.setCentralWidget(self.area)
@@ -48,7 +48,6 @@ class CalibrationView(QMainWindow):
         self.area.addDock(self.dk_template, 'bottom', self.dk_page)
         self.area.addDock(self.dk_control, 'right', self.dk_template)
         self.area.addDock(self.dk_info, 'right', self.dk_control)
-
 
         # page
         img_rgb = asarray(cv2.imread(pages[0]))
@@ -93,7 +92,10 @@ class CalibrationView(QMainWindow):
         self.btn_restore_dock.clicked.connect(self.load)
 
         self.btn_load_pages = QPushButton('Load pages...')
+        self.btn_load_pages.clicked.connect(self.on_load_pages)
         self.btn_load_templates = QPushButton('Load templates...')
+        self.btn_load_templates.clicked.connect(self.on_load_templates)
+
         self.btn_run = QPushButton('Run')
         self.btn_run_all = QPushButton('Run all templates')
         self.btn_run.clicked.connect(self.run)
@@ -122,17 +124,44 @@ class CalibrationView(QMainWindow):
         self.show()
 
     def run(self):
+        self.template_avg()
         visualize = self.cb_visual.isChecked()
-        multi_scale_template_matching(self.image_item_page, self.image_item_template, self.cb_page.currentText(), self.cb_template.currentText(), self.console, visualize)
+        self.multi_scale_template_matching(self.cb_template.currentText())
 
     def run_all(self):
         visualize = self.cb_visual.isChecked()
         for template in self.templates:
-            multi_scale_template_matching(self.image_item_page, self.image_item_template, self.cb_page.currentText(), template, self.console, visualize)
-            time.sleep(3)
+            self.multi_scale_template_matching( template)
 
     def on_change_rect_roi(self):
         pass
+
+    def template_avg(self):
+        pic = Image.open(self.cb_template.currentText())
+        pix = np.array(pic.getdata()).reshape(pic.size[0], pic.size[1], 4)
+        b = np.average(pix[:][:][0])
+        g = np.average(pix[:][:][1])
+        r = np.average(pix[:][:][2])
+        print(f"Template color avg BGR: {b}, {g}, {r}")
+        self.console.write(f"template color avg BGR: {b}, {g}, {r}\n")
+
+    def on_load_pages(self):
+        fnames = QFileDialog.getOpenFileNames(self, '=Load pages', './', "Image files (*.png)")
+        print(f"load page: {fnames}")
+        if fnames[0] != '':
+            for fname in fnames[0]:
+                self.cb_page.addItem(fname)
+                self.pages.append(fname)
+
+
+    def on_load_templates(self):
+        fnames = QFileDialog.getOpenFileNames(self, '=Load templates','./', "Image files (*.png)")
+        print(f"load template: {fnames}")
+        if fnames[0] !=  '':
+            for fname in fnames[0]:
+                self.cb_template.addItem(fname)
+                self.templates.append(fname)
+
 
     def on_export_rect_roi(self):
         print("roi pos: {}".format(self.rect_roi.pos()))
@@ -144,10 +173,12 @@ class CalibrationView(QMainWindow):
         region = im.crop(dim)
 
         name = ntpath.basename(self.cb_page.currentText()).strip(".png")
-        region.save("{}_{}_{}_{}_{}.png".format(name,
+        name = "{}_{}_{}_{}_{}.png".format(name,
                                                 int(self.rect_roi.pos()[0]), int(self.rect_roi.pos()[1]),
                                                 int(self.rect_roi.pos()[0] + self.rect_roi.size()[0]),
-                                                int(self.rect_roi.pos()[1] + self.rect_roi.size()[1])))
+                                                int(self.rect_roi.pos()[1] + self.rect_roi.size()[1]))
+        region.save(name)
+        self.console.write("ROI image: {} is created \n".format(name))
     def save(self):
         self.state = self.area.saveState()
         self.btn_restore_dock.setEnabled(True)
@@ -163,74 +194,96 @@ class CalibrationView(QMainWindow):
         img_rgb = asarray(cv2.imread(self.pages[i]))
         self.image_item_page.setImage(img_rgb)
 
-def multi_scale_template_matching(image_item_page, image_tiem_template, page_file, template_file, console, visual=False):
-    template = cv2.imread(template_file)
-    template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-    template_edge = cv2.Canny(template_gray, 50, 200)
-    (tH, tW) = template_edge.shape[:2]
-    image_tiem_template.setImage(template_edge)
-    # page = cv2.imread(page)
-    # image_item_page.setImage(page)
+    def multi_scale_template_matching(self, template_file):
+        template = cv2.imread(template_file)
+        template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+        template_edge = cv2.Canny(template_gray, 50, 200)
+        (tH, tW) = template_edge.shape[:2]
+        self.image_item_template.setImage(template_edge)
+        # page = cv2.imread(page)
+        # image_item_page.setImage(page)
 
-    # load the image, convert it to grayscale, and initialize the
-    # bookkeeping variable to keep track of the matched region
-    image = cv2.imread(page_file)
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    found = None
+        # load the image, convert it to grayscale, and initialize the
+        # bookkeeping variable to keep track of the matched region
+        image = cv2.imread(self.cb_page.currentText())
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        self.found = None
 
-    # loop over the scales of the image
-    for scale in np.linspace(0.2, 1.0, 20)[::-1]:
-        # resize the image according to the scale, and keep track
-        # of the ratio of the resizing
-        resized = imutils.resize(gray, width=int(gray.shape[1] * scale))
-        r = gray.shape[1] / float(resized.shape[1])
+        # loop over the scales of the image
+        for scale in np.linspace(0.2, 1.0, 20)[::-1]:
+            # resize the image according to the scale, and keep track
+            # of the ratio of the resizing
+            resized = imutils.resize(gray, width=int(gray.shape[1] * scale))
+            r = gray.shape[1] / float(resized.shape[1])
 
-        # if the resized image is smaller than the template, then break
-        # from the loop
-        if resized.shape[0] < tH or resized.shape[1] < tW:
-            break
-        # detect edges in the resized, grayscale image and apply template
-        # matching to find the template in the image
-        edged = cv2.Canny(resized, 50, 200)
-        result = cv2.matchTemplate(edged, template_edge, cv2.TM_CCOEFF)
-        (_, maxVal, _, maxLoc) = cv2.minMaxLoc(result)
+            # if the resized image is smaller than the template, then break
+            # from the loop
+            if resized.shape[0] < tH or resized.shape[1] < tW:
+                break
+            # detect edges in the resized, grayscale image and apply template
+            # matching to find the template in the image
+            edged = cv2.Canny(resized, 50, 200)
+            result = cv2.matchTemplate(edged, template_edge, cv2.TM_CCOEFF)
+            (_, maxVal, _, maxLoc) = cv2.minMaxLoc(result)
 
-        # check to see if the iteration should be visualized
-        if visual is True:
-            # draw a bounding box around the detected region
-            clone = np.dstack([edged, edged, edged])
-            cv2.rectangle(clone, (maxLoc[0], maxLoc[1]),
-                          (maxLoc[0] + tW, maxLoc[1] + tH), (255, 0, 0), 20)
-            image_item_page.setImage(clone)
-            QtGui.QGuiApplication.processEvents()
+            # check to see if the iteration should be visualized
+            if self.cb_visual.isChecked() is True:
+                # draw a bounding box around the detected region
+                clone = np.dstack([edged, edged, edged])
+                cv2.rectangle(clone, (maxLoc[0], maxLoc[1]),
+                              (maxLoc[0] + tW, maxLoc[1] + tH), (255, 0, 0), 20)
+                self.image_item_page.setImage(clone)
+                QtGui.QGuiApplication.processEvents()
 
-            # cv2.waitKey(0)
+                # cv2.waitKey(0)
 
-        # if we have found a new maximum correlation value, then update
-        # the bookkeeping variable
-        if found is None or maxVal > found[0]:
-            found = (maxVal, maxLoc, r)
-            print("{}:  {}".format(page_file, found))
-            console.write("image: {}, scale:{}, found: {}\n".format(page_file, scale, found))
-
-
-    # unpack the bookkeeping variable and compute the (x, y) coordinates
-    # of the bounding box based on the resized ratio
-    (_, maxLoc, r) = found
-    (startX, startY) = (int(maxLoc[0] * r), int(maxLoc[1] * r))
-    (endX, endY) = (int((maxLoc[0] + tW) * r), int((maxLoc[1] + tH) * r))
-    print("{}: found: {}".format(page_file, found))
-    console.write("{}: {}\n".format(page_file, found))
-
-    # draw a bounding box around the detected result and display the image
-    cv2.rectangle(image, (startX, startY), (endX, endY), (255, 0, 0), 20)
-
-    image_item_page.setImage(image)
-    image_tiem_template.setImage(template)
-    QtGui.QGuiApplication.processEvents()
+            # if we have found a new maximum correlation value, then update
+            # the bookkeeping variable
+            if self.found is None or maxVal > self.found[0]:
+                self.found = (maxVal, maxLoc, r)
+                print("{}:  {}".format(page_file, self.found))
+                self.console.write("{}: scale:{}, found: {}\n".format(page_file, scale, self.found))
 
 
+        # unpack the bookkeeping variable and compute the (x, y) coordinates
+        # of the bounding box based on the resized ratio
+        (_, maxLoc, r) = self.found
+        (startX, startY) = (int(maxLoc[0] * r), int(maxLoc[1] * r))
+        (endX, endY) = (int((maxLoc[0] + tW) * r), int((maxLoc[1] + tH) * r))
+        print("{}: found: {}".format(page_file, self.found))
+        self.console.write("{}: {}\n".format(page_file, self.found))
 
+        # calculate avg color here
+        print (image.size)
+        print (image.shape)
+        b = np.average(image[startX:endX,startY:endY,0])
+        g = np.average(image[startX:endX,startY:endY,1])
+        r = np.average(image[startX:endX,startY:endY,2])
+        self.console.write(f"color avg BGR: {b}, {g}, {r}\n")
+
+
+        # draw a bounding box around the detected result and display the image
+        cv2.rectangle(image, (startX, startY), (endX, endY), (255, 0, 0), 20)
+
+        self.image_item_page.setImage(image)
+        self.image_item_template.setImage(template)
+        QtGui.QGuiApplication.processEvents()
+
+        return
+
+        pic = Image.open(self.cb_page.currentText())
+        print(f"pic size {pic.size}")
+        pix = np.array(pic.getdata()).reshape(pic.size[0], pic.size[1], 4)
+        print(f"startX: {startX}, endX: {endX}, startY: {startY}, endY: {endY}")
+        print(f"pix shape: {pix.shape}, pix size: {pix.size}")
+        # region = pix[startX:endX,startY:endY]
+        # print(f"region shape: {region.shape}, region size: {region.size}")
+
+        b = np.average(pix[startX:endX,startY:endY,0])
+        g = np.average(pix[startX:endX,startY:endY,1])
+        r = np.average(pix[startX:endX,startY:endY,2])
+
+        self.console.write(f"color avg BGR: {b}, {g}, {r}\n")
 
 
 ## Start Qt event loop unless running in interactive mode or using pyside.

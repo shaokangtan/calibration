@@ -50,8 +50,8 @@ class CalibrationView(QMainWindow):
         self.area.addDock(self.dk_info, 'right', self.dk_control)
 
         # page
-        img_rgb = asarray(cv2.imread(pages[0]))
-        self.image_item_page = pg.ImageItem(img_rgb, axisOrder='row-major')
+        img_bgr = asarray(cv2.imread(pages[0]))
+        self.image_item_page = pg.ImageItem(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB), axisOrder='row-major')
         self.image_view = pg.ImageView(imageItem=self.image_item_page)
         self.dk_page.addWidget(self.image_view)
 
@@ -138,12 +138,15 @@ class CalibrationView(QMainWindow):
 
     def template_avg(self):
         pic = Image.open(self.cb_template.currentText())
-        pix = np.array(pic.getdata()).reshape(pic.size[0], pic.size[1], 4)
-        b = np.average(pix[:][:][0])
-        g = np.average(pix[:][:][1])
-        r = np.average(pix[:][:][2])
-        print(f"Template color avg BGR: {b}, {g}, {r}")
-        self.console.write(f"template color avg BGR: {b}, {g}, {r}\n")
+        pix = np.array(pic.getdata()).reshape(pic.size[1], pic.size[0], 4)
+        r = np.average(pix[:,:,0])
+        g = np.average(pix[:,:,1])
+        b = np.average(pix[:,:,2])
+
+        print(f"pic size {pic.size}")
+        print(f"pix shape: {pix.shape}, pix size: {pix.size}")
+        print(f"Template color avg BGR: {r}, {g}, {b}")
+        self.console.write(f"template color avg BGR: {r}, {g}, {b}\n")
 
     def on_load_pages(self):
         fnames = QFileDialog.getOpenFileNames(self, '=Load pages', './', "Image files (*.png)")
@@ -187,22 +190,20 @@ class CalibrationView(QMainWindow):
         self.area.restoreState(self.state)
 
     def template_change(self, i):
-        img_rgb = asarray(cv2.imread(self.templates[i]))
-        self.image_item_template.setImage(img_rgb)
+        img_bgr = asarray(cv2.imread(self.templates[i]))
+        self.image_item_page.setImage(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
 
     def page_change(self, i):
-        img_rgb = asarray(cv2.imread(self.pages[i]))
-        self.image_item_page.setImage(img_rgb)
+        img_bgr = asarray(cv2.imread(self.pages[i]))
+        self.image_item_page.setImage(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
 
     def multi_scale_template_matching(self, template_file):
         template = cv2.imread(template_file)
         template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
         template_edge = cv2.Canny(template_gray, 50, 200)
         (tH, tW) = template_edge.shape[:2]
-        self.image_item_template.setImage(template_edge)
-        # page = cv2.imread(page)
-        # image_item_page.setImage(page)
-
+        if self.cb_visual.isChecked():
+            self.image_item_template.setImage(template_edge)
         # load the image, convert it to grayscale, and initialize the
         # bookkeeping variable to keep track of the matched region
         image = cv2.imread(self.cb_page.currentText())
@@ -231,7 +232,7 @@ class CalibrationView(QMainWindow):
                 # draw a bounding box around the detected region
                 clone = np.dstack([edged, edged, edged])
                 cv2.rectangle(clone, (maxLoc[0], maxLoc[1]),
-                              (maxLoc[0] + tW, maxLoc[1] + tH), (255, 0, 0), 20)
+                              (maxLoc[0] + tW, maxLoc[1] + tH), (0, 0, 255), 10)
                 self.image_item_page.setImage(clone)
                 QtGui.QGuiApplication.processEvents()
 
@@ -254,37 +255,45 @@ class CalibrationView(QMainWindow):
         self.console.write("{}: {}\n".format(page_file, self.found))
 
         # calculate avg color here
-        print (image.size)
-        print (image.shape)
-        b = np.average(image[startX:endX,startY:endY,0])
-        g = np.average(image[startX:endX,startY:endY,1])
-        r = np.average(image[startX:endX,startY:endY,2])
-        self.console.write(f"color avg BGR: {b}, {g}, {r}\n")
+        print (f"image size: {image.size}")
+        print (f"image shape: {image.shape}")
+        print(f"startX: {startX}, endX: {endX}, startY: {startY}, endY: {endY}")
+        # cv2 use BGR order ! y-X axis
+        b = np.average(image[startY:endY,startX:endX,0])
+        g = np.average(image[startY:endY,startX:endX,1])
+        r = np.average(image[startY:endY,startX:endX,2])
+        self.console.write(f"color avg BGR: {r}, {g}, {b}\n")
+        print(f"color avg BGR: {r}, {g}, {b}\n")
 
 
         # draw a bounding box around the detected result and display the image
-        cv2.rectangle(image, (startX, startY), (endX, endY), (255, 0, 0), 20)
+        cv2.rectangle(image, (startX, startY), (endX, endY), (0, 0, 255), 10)
 
-        self.image_item_page.setImage(image)
-        self.image_item_template.setImage(template)
+        self.image_item_page.setImage(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        self.image_item_template.setImage(cv2.cvtColor(template, cv2.COLOR_BGR2RGB))
         QtGui.QGuiApplication.processEvents()
 
-        return
 
         pic = Image.open(self.cb_page.currentText())
         print(f"pic size {pic.size}")
-        pix = np.array(pic.getdata()).reshape(pic.size[0], pic.size[1], 4)
+        pix = np.array(pic.getdata()).reshape(pic.size[1], pic.size[0], 4)
         print(f"startX: {startX}, endX: {endX}, startY: {startY}, endY: {endY}")
         print(f"pix shape: {pix.shape}, pix size: {pix.size}")
         # region = pix[startX:endX,startY:endY]
         # print(f"region shape: {region.shape}, region size: {region.size}")
+        # PIL use RGB order
+        # r = np.average(pix[startX:endX,startY:endY,0])
+        # g = np.average(pix[startX:endX,startY:endY,1])
+        # b = np.average(pix[startX:endX,startY:endY,2])
+        #
+        # self.console.write(f"color avg BGR: {r}, {g}, {b}\n")
+        # print(f"color avg BGR: {r}, {g}, {b}\n")
+        r = np.average(pix[startY:endY,startX:endX,0])
+        g = np.average(pix[startY:endY,startX:endX,1])
+        b = np.average(pix[startY:endY,startX:endX,2])
 
-        b = np.average(pix[startX:endX,startY:endY,0])
-        g = np.average(pix[startX:endX,startY:endY,1])
-        r = np.average(pix[startX:endX,startY:endY,2])
-
-        self.console.write(f"color avg BGR: {b}, {g}, {r}\n")
-
+        self.console.write(f"color avg BGR: {r}, {g}, {b}\n")
+        print(f"color avg BGR: {r}, {g}, {b}\n")
 
 ## Start Qt event loop unless running in interactive mode or using pyside.
 if __name__ == '__main__':

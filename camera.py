@@ -13,7 +13,7 @@ import time
 # - brew install opencv
 
 cap = cv2.VideoCapture(0)
-now = time.clock()
+start = time.clock()
 frames = 0
 while(True):
     ret, frame = cap.read()
@@ -25,6 +25,6 @@ while(True):
         out = cv2.imwrite('capture.jpg', frame)
         break
 
-print(f"{frames/(time.clock()-now)} fp/s" )
+print(f"{frames/(time.clock()-start)} fp/s" )
 cap.release()
 cv2.destroyAllWindows()

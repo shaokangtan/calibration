@@ -28,6 +28,7 @@ class CalibrationView(QMainWindow):
         if len(pages) == 0 or len(templates) == 0:
             print("error: no pages/templates loaded")
             return None
+        self.videos = []
         self.pages = list(pages)
         self.templates = list(templates)
         self.verbose = verbose
@@ -73,6 +74,10 @@ class CalibrationView(QMainWindow):
         self.dk_info.addWidget(self.console)
 
         # control
+        self.label_video = QLabel("Video:")
+        self.cb_video = QComboBox()
+        self.cb_video.currentIndexChanged.connect(self.video_change)
+
         self.label_page = QLabel("Page:")
         self.cb_page = QComboBox()
         for page in self.pages:
@@ -91,13 +96,19 @@ class CalibrationView(QMainWindow):
         self.btn_save_dockstn.clicked.connect(self.save)
         self.btn_restore_dock.clicked.connect(self.load)
 
+        self.btn_load_videos = QPushButton('Load videos...')
+        self.btn_load_videos.clicked.connect(self.on_load_videos)
         self.btn_load_pages = QPushButton('Load pages...')
         self.btn_load_pages.clicked.connect(self.on_load_pages)
         self.btn_load_templates = QPushButton('Load templates...')
         self.btn_load_templates.clicked.connect(self.on_load_templates)
 
-        self.btn_run = QPushButton('Run')
+        self.btn_play_video = QPushButton('play video')
+        self.btn_sim = QPushButton('Run video')
+        self.btn_run = QPushButton('Run Page')
         self.btn_run_all = QPushButton('Run all templates')
+        self.btn_play_video.clicked.connect(self.play_video)
+        self.btn_sim.clicked.connect(self.sim)
         self.btn_run.clicked.connect(self.run)
         self.btn_run_all.clicked.connect(self.run_all)
         self.btn_export_roi = QPushButton('Save ROI')
@@ -107,26 +118,77 @@ class CalibrationView(QMainWindow):
         self.cb_export = QCheckBox('Export', self)
 
         self.dk_control.addWidget(self.label_page, row=0, col=0)
-        self.dk_control.addWidget(self.cb_page, row=0, col=1, colspan=3)
-        self.dk_control.addWidget(self.btn_load_pages, row=0, col=4)
+        self.dk_control.addWidget(self.cb_page, row=0, col=1, colspan=2)
+        self.dk_control.addWidget(self.btn_load_pages, row=0, col=3)
         self.dk_control.addWidget(self.label_template, row=1, col=0)
-        self.dk_control.addWidget(self.cb_template, row=1, col=1, colspan=3)
-        self.dk_control.addWidget(self.btn_load_templates, row=1, col=4)
+        self.dk_control.addWidget(self.cb_template, row=1, col=1, colspan=2)
+        self.dk_control.addWidget(self.btn_load_templates, row=1, col=3)
 
         self.dk_control.addWidget(self.btn_run, row=2, col=0)
         self.dk_control.addWidget(self.btn_run_all, row=2, col=1)
         self.dk_control.addWidget(self.btn_export_roi, row=2, col=2)
         self.dk_control.addWidget(self.cb_visual, row=3, col=0)
         self.dk_control.addWidget(self.cb_export, row=3, col=1)
-        self.dk_control.addWidget(self.btn_save_dockstn, row=2, col=3)
-        self.dk_control.addWidget(self.btn_restore_dock, row=2, col=4 )
+        self.dk_control.addWidget(self.btn_save_dockstn, row=3, col=2)
+        self.dk_control.addWidget(self.btn_restore_dock, row=3, col=3)
+
+        self.dk_control.addWidget(self.label_video, row=4, col=0)
+        self.dk_control.addWidget(self.cb_video, row=4, col=1, colspan=2)
+        self.dk_control.addWidget(self.btn_load_videos, row=4, col=3)
+        self.dk_control.addWidget(self.btn_play_video, row=5, col=0)
+        self.dk_control.addWidget(self.btn_sim, row=5, col=1)
+
 
         self.show()
 
     def run(self):
         self.template_avg()
         visualize = self.cb_visual.isChecked()
-        self.multi_scale_template_matching(self.cb_template.currentText())
+        self.multi_scale_template_matching(self.cb_template.currentText(), debug=False)
+
+    def play_video(self):
+        self.sim(calculate=False)
+
+    def sim(self, calculate=True):
+        self.template_avg()
+        visualize = self.cb_visual.isChecked()
+        # self.multi_scale_template_matching(self.cb_template.currentText())
+        cap = cv2.VideoCapture(self.cb_video.currentText())
+        if (cap.isOpened() == False):
+            print("Error opening video stream or file")
+
+        # Read until video is completed
+        frames = 0
+        start = time.clock()
+        template = cv2.imread(self.cb_template.currentText())
+        template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+        template_edge = cv2.Canny(template_gray, 50, 200)
+        while (cap.isOpened()):
+            # Capture frame-by-frame
+            ret, frame = cap.read()
+            if ret == True:
+                frames += 1
+                # Display the resulting frame
+                # cv2.imshow('Frame', frame)
+                if calculate:
+                    print(f"frame: {frames}")
+                    self.multi_scale_template_matching(template_edge=template_edge, frame=frame, debug=False, paint=False)
+                else:
+                    self.image_item_page.setImage(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+                # Press Q on keyboard to  exit
+                if cv2.waitKey(25) & 0xFF == ord('q'):
+                    break
+            # Break the loop
+            else:
+                break
+
+        print(f"{frames / (time.clock() - start)} fp/s")
+        # When everything done, release the video capture object
+        cap.release()
+        # Closes all the frames
+        cv2.destroyAllWindows()
+
 
     def run_all(self):
         visualize = self.cb_visual.isChecked()
@@ -147,6 +209,14 @@ class CalibrationView(QMainWindow):
         print(f"pix shape: {pix.shape}, pix size: {pix.size}")
         print(f"Template color avg BGR: {r}, {g}, {b}")
         self.console.write(f"template color avg BGR: {r}, {g}, {b}\n")
+
+    def on_load_videos(self):
+        fnames = QFileDialog.getOpenFileNames(self, '=Load videos', './', "Video files (*.mov)")
+        print(f"load video: {fnames}")
+        if fnames[0] != '':
+            for fname in fnames[0]:
+                self.cb_video.addItem(fname)
+                self.videos.append(fname)
 
     def on_load_pages(self):
         fnames = QFileDialog.getOpenFileNames(self, '=Load pages', './', "Image files (*.png)")
@@ -182,6 +252,7 @@ class CalibrationView(QMainWindow):
                                                 int(self.rect_roi.pos()[1] + self.rect_roi.size()[1]))
         region.save(name)
         self.console.write("ROI image: {} is created \n".format(name))
+
     def save(self):
         self.state = self.area.saveState()
         self.btn_restore_dock.setEnabled(True)
@@ -191,27 +262,38 @@ class CalibrationView(QMainWindow):
 
     def template_change(self, i):
         img_bgr = asarray(cv2.imread(self.templates[i]))
-        self.image_item_page.setImage(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
+        self.image_item_template.setImage(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
 
     def page_change(self, i):
         img_bgr = asarray(cv2.imread(self.pages[i]))
         self.image_item_page.setImage(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
 
-    def multi_scale_template_matching(self, template_file):
-        template = cv2.imread(template_file)
-        template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-        template_edge = cv2.Canny(template_gray, 50, 200)
+
+    def video_change(self, i):
+        pass
+        # img_bgr = asarray(cv2.imread(self.videos[i]))
+        # self.image_item_page.setImage(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
+
+    def multi_scale_template_matching(self, template_file=None, template_edge=None, frame=None, debug=True, paint=True):
+        if template_edge is None:
+            template = cv2.imread(template_file)
+            template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+            template_edge = cv2.Canny(template_gray, 50, 200)
         (tH, tW) = template_edge.shape[:2]
-        if self.cb_visual.isChecked():
+        if paint and self.cb_visual.isChecked():
             self.image_item_template.setImage(template_edge)
         # load the image, convert it to grayscale, and initialize the
         # bookkeeping variable to keep track of the matched region
-        image = cv2.imread(self.cb_page.currentText())
+        if frame is not None:
+            image = frame
+        else:
+            image = cv2.imread(self.cb_page.currentText())
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         self.found = None
 
         # loop over the scales of the image
         for scale in np.linspace(0.2, 1.0, 20)[::-1]:
+        # for scale in np.linspace(1.0, 1.0, 1)[::-1]:
             # resize the image according to the scale, and keep track
             # of the ratio of the resizing
             resized = imutils.resize(gray, width=int(gray.shape[1] * scale))
@@ -228,7 +310,7 @@ class CalibrationView(QMainWindow):
             (_, maxVal, _, maxLoc) = cv2.minMaxLoc(result)
 
             # check to see if the iteration should be visualized
-            if self.cb_visual.isChecked() is True:
+            if paint and self.cb_visual.isChecked() is True:
                 # draw a bounding box around the detected region
                 clone = np.dstack([edged, edged, edged])
                 cv2.rectangle(clone, (maxLoc[0], maxLoc[1]),
@@ -242,7 +324,8 @@ class CalibrationView(QMainWindow):
             # the bookkeeping variable
             if self.found is None or maxVal > self.found[0]:
                 self.found = (maxVal, maxLoc, r)
-                print("{}:  {}".format(page_file, self.found))
+                if debug:
+                    print("{}:  {}".format(page_file, self.found))
                 self.console.write("{}: scale:{}, found: {}\n".format(page_file, scale, self.found))
 
 
@@ -251,34 +334,41 @@ class CalibrationView(QMainWindow):
         (_, maxLoc, r) = self.found
         (startX, startY) = (int(maxLoc[0] * r), int(maxLoc[1] * r))
         (endX, endY) = (int((maxLoc[0] + tW) * r), int((maxLoc[1] + tH) * r))
-        print("{}: found: {}".format(page_file, self.found))
+        if debug:
+            print("{}: found: {}".format(page_file, self.found))
         self.console.write("{}: {}\n".format(page_file, self.found))
 
         # calculate avg color here
-        print (f"image size: {image.size}")
-        print (f"image shape: {image.shape}")
-        print(f"startX: {startX}, endX: {endX}, startY: {startY}, endY: {endY}")
-        # cv2 use BGR order ! y-X axis
-        b = np.average(image[startY:endY,startX:endX,0])
-        g = np.average(image[startY:endY,startX:endX,1])
-        r = np.average(image[startY:endY,startX:endX,2])
-        self.console.write(f"color avg BGR: {r}, {g}, {b}\n")
-        print(f"color avg BGR: {r}, {g}, {b}\n")
+        if debug:
+            print (f"image size: {image.size}")
+            print (f"image shape: {image.shape}")
+            print(f"startX: {startX}, endX: {endX}, startY: {startY}, endY: {endY}")
+            # cv2 use BGR order ! y-X axis
+            b = np.average(image[startY:endY,startX:endX,0])
+            g = np.average(image[startY:endY,startX:endX,1])
+            r = np.average(image[startY:endY,startX:endX,2])
+            self.console.write(f"color avg BGR: {r}, {g}, {b}\n")
+            print(f"color avg BGR: {r}, {g}, {b}\n")
 
+        if paint is True:
+            # draw a bounding box around the detected result and display the image
+            cv2.rectangle(image, (startX, startY), (endX, endY), (0, 0, 255), 10)
 
-        # draw a bounding box around the detected result and display the image
-        cv2.rectangle(image, (startX, startY), (endX, endY), (0, 0, 255), 10)
+            self.image_item_page.setImage(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+            if self.cb_visual.isChecked():
+                template = cv2.imread(template_file)
+                self.image_item_template.setImage(cv2.cvtColor(template, cv2.COLOR_BGR2RGB))
+            QtGui.QGuiApplication.processEvents()
 
-        self.image_item_page.setImage(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-        self.image_item_template.setImage(cv2.cvtColor(template, cv2.COLOR_BGR2RGB))
-        QtGui.QGuiApplication.processEvents()
-
+        return
 
         pic = Image.open(self.cb_page.currentText())
-        print(f"pic size {pic.size}")
+        if debug:
+            print(f"pic size {pic.size}")
         pix = np.array(pic.getdata()).reshape(pic.size[1], pic.size[0], 4)
-        print(f"startX: {startX}, endX: {endX}, startY: {startY}, endY: {endY}")
-        print(f"pix shape: {pix.shape}, pix size: {pix.size}")
+        if debug:
+            print(f"startX: {startX}, endX: {endX}, startY: {startY}, endY: {endY}")
+            print(f"pix shape: {pix.shape}, pix size: {pix.size}")
         # region = pix[startX:endX,startY:endY]
         # print(f"region shape: {region.shape}, region size: {region.size}")
         # PIL use RGB order
@@ -293,7 +383,8 @@ class CalibrationView(QMainWindow):
         b = np.average(pix[startY:endY,startX:endX,2])
 
         self.console.write(f"color avg BGR: {r}, {g}, {b}\n")
-        print(f"color avg BGR: {r}, {g}, {b}\n")
+        if debug:
+            print(f"color avg BGR: {r}, {g}, {b}\n")
 
 ## Start Qt event loop unless running in interactive mode or using pyside.
 if __name__ == '__main__':

@@ -1,0 +1,39 @@
+{
+  "device_id": "60df8",
+  "user_email": "test_-_lua_qa_60df8@uvvutesting.biz",
+  "user_password": "Vudu1234",
+  "pages": {
+    "main menu page": {
+      "keys": ["KEY_VUDU_HOME"],
+      "templates": ["file1", "file2"],
+      "texts":[[[0,0,1280,70],"MY VUDU"],
+               [[0,0,1280,70],"SPOTLIGHT"]]
+    },
+    "my vudu page": {
+      "keys": ["KEY_VUDU_HOME", "KEY_LEFT"],
+      "templates": []
+    },
+    "spotlight page": {
+      "keys": [],
+      "templates": []
+    },
+    "movie page": {
+      "keys": [],
+      "templates": []
+    },
+    "tv page": {
+      "keys": [],
+      "templates": []
+    },
+    "detailed page": {
+      "keys": ["KEY_VUDU_HOME", "KEY_RIGHT", "KEY_RIGHT", "KEY_DOWN", "KEY_DOWN", "KEY_SELECT"],
+      "templates": []
+    },
+    "playback page": {
+      "keys": ["KEY_VUDU_HOME", "KEY_RIGHT", "KEY_DOWN", "KEY_DOWN", "KEY_SELECT", "KEY_DOWN"],
+      "templates": []
+    }
+  }
+
+
+}

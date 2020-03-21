@@ -15,11 +15,11 @@ import getopt
 import glob
 import ntpath
 import pytesseract
-
+import json
 
 
 import time
-
+from image import compare_rgb
 VERSION = "0.0.1"
 
 
@@ -37,6 +37,7 @@ class CalibrationView(QMainWindow):
         self.setCentralWidget(self.area)
         self.resize(1024, 900)
         self.setWindowTitle(title)
+        self.start_streaming = False
 
         ## Create docks, place them into the window one at a time.
         ## Note that size arguments are only a suggestion; docks will still have to
@@ -67,8 +68,8 @@ class CalibrationView(QMainWindow):
         # template
         img_rgb = asarray(cv2.imread(templates[0]))
         self.image_item_template = pg.ImageItem(img_rgb, axisOrder='row-major')
-        self.image_view = pg.ImageView(imageItem=self.image_item_template)
-        self.dk_template.addWidget(self.image_view)
+        self.template_view = pg.ImageView(imageItem=self.image_item_template)
+        self.dk_template.addWidget(self.template_view)
 
         # info
         self.widget_info = pg.LayoutWidget()
@@ -78,19 +79,20 @@ class CalibrationView(QMainWindow):
         # control
         self.label_video = QLabel("Video:")
         self.cb_video = QComboBox()
-        self.cb_video.currentIndexChanged.connect(self.video_change)
+        self.cb_video.currentIndexChanged.connect(self.on_video_change)
 
         self.label_page = QLabel("Page:")
         self.cb_page = QComboBox()
         for page in self.pages:
             self.cb_page.addItem(page)
-        self.cb_page.currentIndexChanged.connect(self.page_change)
+        self.cb_page.currentIndexChanged.connect(self.on_page_change)
 
         self.label_template = QLabel("Template:")
         self.cb_template = QComboBox()
         for template in self.templates:
             self.cb_template.addItem(template)
-        self.cb_template.currentIndexChanged.connect(self.template_change)
+        self.cb_template.currentIndexChanged.connect(self.on_template_change)
+        self.template_rgb_avg()
 
         self.btn_save_dockstn = QPushButton('Save dock state')
         self.btn_restore_dock = QPushButton('Restore dock state')
@@ -105,13 +107,24 @@ class CalibrationView(QMainWindow):
         self.btn_load_templates = QPushButton('Load templates...')
         self.btn_load_templates.clicked.connect(self.on_load_templates)
 
+        self.label_video_capture = QLabel("video capture:")
+        self.cb_video_capture = QComboBox()
+        self.cb_video_capture.addItem("0")
+        self.cb_video_capture.addItem("1")
+        self.cb_video_capture.addItem("udp://127.0.0.1:10000")
         self.btn_start_video = QPushButton('Start video')
         self.btn_stop_video = QPushButton('Stop video')
+
+        self.btn_start_camera = QPushButton('Start camera')
+        self.btn_stop_camera = QPushButton('Stop camera')
         self.btn_search = QPushButton('Search template')
         self.btn_search_all = QPushButton('Search all templates')
+        self.cb_video_capture.currentIndexChanged.connect(self.on_video_capture_change)
         self.btn_start_video.clicked.connect(self.start_video)
         self.btn_stop_video.clicked.connect(self.stop_video)
-        self.btn_search.clicked.connect(self.run)
+        self.btn_start_camera.clicked.connect(self.start_camera)
+        self.btn_stop_camera.clicked.connect(self.stop_camera)
+        self.btn_search.clicked.connect(self.search)
         self.btn_search_all.clicked.connect(self.run_all)
         self.btn_ocr_roi = QPushButton('OCR ROI')
         self.btn_ocr_roi.clicked.connect(self.on_ocr_roi)
@@ -138,55 +151,56 @@ class CalibrationView(QMainWindow):
         self.dk_control.addWidget(self.btn_restore_dock, row=3, col=3)
 
         self.dk_control.addWidget(self.label_video, row=4, col=0)
-        self.dk_control.addWidget(self.cb_video, row=4, col=1, colspan=2)
-        self.dk_control.addWidget(self.btn_load_videos, row=4, col=3)
-        self.dk_control.addWidget(self.btn_start_video, row=5, col=0)
-        self.dk_control.addWidget(self.btn_stop_video, row=5, col=1)
+        self.dk_control.addWidget(self.cb_video, row=4, col=1, colspan=1)
+        self.dk_control.addWidget(self.btn_load_videos, row=4, col=2)
+        self.dk_control.addWidget(self.btn_start_video, row=4, col=3)
+        self.dk_control.addWidget(self.btn_stop_video, row=4, col=4)
 
+        self.dk_control.addWidget(self.label_video_capture, row=5, col=0)
+        self.dk_control.addWidget(self.cb_video_capture, row=5, col=1)
+        self.dk_control.addWidget(self.btn_start_camera, row=5, col=2)
+        self.dk_control.addWidget(self.btn_stop_camera, row=5, col=3)
 
         self.show()
 
-    def run(self):
-        self.template_avg()
+    def search(self):
         visualize = self.cb_visual.isChecked()
-        self.template_matching(self.cb_template.currentText(), debug=False)
+        self.template_matching(self.cb_template.currentText())
 
     def start_video(self):
         # self.sim(calculate=False)
-        self.start_streaming = True
-        self.streaming()
+        self.play_video()
+
+    def start_camera(self):
+        if self.start_streaming is False:
+            self.start_streaming = True
+            self.streaming(self.cb_video_capture.currentText())
 
     def stop_video(self):
         self.start_streaming = False
 
-    def streaming(self):
+    def stop_camera(self):
+        self.start_streaming = False
+
+    def streaming(self, camera="0"):
         import cv2
         import numpy as np
         from goprocam import GoProCamera
         # from goprocam import constants
-        cascPath = "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml"
+        # cascPath = "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml"
         # faceCascade = cv2.CascadeClassifier(cascPath)
-        gpCam = GoProCamera.GoPro()
-        cap = cv2.VideoCapture("udp://127.0.0.1:10000")
+        print(f"camera is {camera}")
+        if camera.isnumeric():
+            cap = cv2.VideoCapture(int(camera))
+        else:
+            gpCam = GoProCamera.GoPro()
+            cap = cv2.VideoCapture(camera)
         frames = 0
         start = time.clock()
         while self.start_streaming is True:
-            ret, frame = cap.read()
+            ret, self.frame = cap.read()
             frames += 1
-            # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            # faces = faceCascade.detectMultiScale(
-            #     gray,
-            #     scaleFactor=1.1,
-            #     minNeighbors=5,
-            #     minSize=(30, 30),
-            #     flags=cv2.CASCADE_SCALE_IMAGE
-            # )
-            # for (x, y, w, h) in faces:
-            #     cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-
-            # cv2.imshow("GoPro OpenCV", frame)
-            self.image_item_page.setImage(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            self.frame = frame
+            self.image_item_page.setImage(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB))
             QtGui.QGuiApplication.processEvents()
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
@@ -234,6 +248,37 @@ class CalibrationView(QMainWindow):
         # Closes all the frames
         cv2.destroyAllWindows()
 
+    def play_video(self):
+        if self.start_streaming is True:
+            return
+        self.start_streaming = True
+        cap = cv2.VideoCapture(self.cb_video.currentText())
+        if (cap.isOpened() == False):
+            print("Error opening video stream or file")
+
+        # Read until video is completed
+        frames = 0
+        start = time.clock()
+        while cap.isOpened() and self.start_streaming is True:
+            # Capture frame-by-frame
+            ret, self.frame = cap.read()
+            if ret == True:
+                frames += 1
+                self.image_item_page.setImage(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB))
+
+                # Press Q on keyboard to exit
+                if cv2.waitKey(25) & 0xFF == ord('q'):
+                    break
+            # Break the loop
+            else:
+                break
+            QtGui.QGuiApplication.processEvents()
+
+        print(f"{frames / (time.clock() - start)} fp/s")
+        # When everything done, release the video capture object
+        cap.release()
+        # Closes all the frames
+        cv2.destroyAllWindows()
 
     def run_all(self):
         visualize = self.cb_visual.isChecked()
@@ -241,22 +286,41 @@ class CalibrationView(QMainWindow):
             self.template_matching( template)
 
     def on_change_rect_roi(self):
-        pass
+        # pic = Image.open(self.cb_page.currentText())
+        # pix = np.array(pic.getdata()).reshape(pic.size[1], pic.size[0], 4)
+        dim = (int(self.rect_roi.pos()[0]), int(self.rect_roi.pos()[1]),
+               int(self.rect_roi.pos()[0] + self.rect_roi.size()[0]),
+               int(self.rect_roi.pos()[1] + self.rect_roi.size()[1]))
+        # b = np.average(pix[dim[1]:dim[3],dim[0]:dim[2], 0])
+        # g = np.average(pix[dim[1]:dim[3],dim[0]:dim[2], 1])
+        # r = np.average(pix[dim[1]:dim[3],dim[0]:dim[2], 2])
+        b = int(np.average(self.frame[dim[1]:dim[3], dim[0]:dim[2], 0]))
+        g = int(np.average(self.frame[dim[1]:dim[3], dim[0]:dim[2], 1]))
+        r = int(np.average(self.frame[dim[1]:dim[3], dim[0]:dim[2], 2]))
+        roi_rgb = (r, g, b)
 
-    def template_avg(self):
+        # print(f"ROI pic size {pic.size}")
+        # print(f"ROI pix shape: {pix.shape}, ROI pix size: {pix.size}")
+        delta = compare_rgb(self.template_rgb, roi_rgb)
+        self.console.write(f"ROI avg RGB: {r}, {g}, {b}, template distance: {delta}\n")
+        print(f"ROI avg RGB: {r}, {g}, {b}, template avg RGB: {self.template_rgb}, template distance:{delta}")
+
+    def template_rgb_avg(self):
         pic = Image.open(self.cb_template.currentText())
         pix = np.array(pic.getdata()).reshape(pic.size[1], pic.size[0], 4)
-        r = np.average(pix[:,:,0])
-        g = np.average(pix[:,:,1])
-        b = np.average(pix[:,:,2])
+        r = int(np.average(pix[:,:,0]))
+        g = int(np.average(pix[:,:,1]))
+        b = int(np.average(pix[:,:,2]))
+        self.template_rgb=(r,g,b)
 
         print(f"pic size {pic.size}")
         print(f"pix shape: {pix.shape}, pix size: {pix.size}")
-        print(f"Template color avg BGR: {r}, {g}, {b}")
-        self.console.write(f"template color avg BGR: {r}, {g}, {b}\n")
+        print(f"Template color avg RGB: {r}, {g}, {b}")
+        self.console.write(f"template color avg RGB: {r}, {g}, {b}\n")
 
     def on_load_videos(self):
-        fnames = QFileDialog.getOpenFileNames(self, '=Load videos', './', "Video files (*.mov)")
+        fnames = QFileDialog.getOpenFileNames(self, '=Load videos', './', "Video files (*.mov *.mp4)")
+        # fnames=[["/Users/h0t00qt/Documents/VuduAutomation/calibration/video.mp4"]]
         print(f"load video: {fnames}")
         if fnames[0] != '':
             for fname in fnames[0]:
@@ -270,6 +334,8 @@ class CalibrationView(QMainWindow):
             for fname in fnames[0]:
                 self.cb_page.addItem(fname)
                 self.pages.append(fname)
+            # upload pages listbox
+            self.cb_page.setCurrentIndex(len(self.pages)-1)
 
 
     def on_load_templates(self):
@@ -279,6 +345,10 @@ class CalibrationView(QMainWindow):
             for fname in fnames[0]:
                 self.cb_template.addItem(fname)
                 self.templates.append(fname)
+            self.cb_template.setCurrentIndex(len(self.templates)-1)
+
+    def on_video_capture_change(self):
+        pass
 
     def on_ocr_roi(self):
         assert self.frame is not None
@@ -319,16 +389,17 @@ class CalibrationView(QMainWindow):
     def load(self):
         self.area.restoreState(self.state)
 
-    def template_change(self, i):
+    def on_template_change(self, i):
         img_bgr = asarray(cv2.imread(self.templates[i]))
         self.image_item_template.setImage(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
+        self.template_rgb_avg()
 
-    def page_change(self, i):
+    def on_page_change(self, i):
         img_bgr = asarray(cv2.imread(self.pages[i]))
         self.image_item_page.setImage(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
         self.frame = img_bgr
 
-    def video_change(self, i):
+    def on_video_change(self, i):
         pass
         # img_bgr = asarray(cv2.imread(self.videos[i]))
         # self.image_item_page.setImage(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
@@ -405,11 +476,11 @@ class CalibrationView(QMainWindow):
             print (f"image shape: {image.shape}")
             print(f"startX: {startX}, endX: {endX}, startY: {startY}, endY: {endY}")
             # cv2 use BGR order ! y-X axis
-            b = np.average(image[startY:endY,startX:endX,0])
-            g = np.average(image[startY:endY,startX:endX,1])
-            r = np.average(image[startY:endY,startX:endX,2])
-            self.console.write(f"color avg BGR: {r}, {g}, {b}\n")
-            print(f"color avg BGR: {r}, {g}, {b}\n")
+            b = int(np.average(image[startY:endY,startX:endX,0]))
+            g = int(np.average(image[startY:endY,startX:endX,1]))
+            r = int(np.average(image[startY:endY,startX:endX,2]))
+            self.console.write(f"color avg RGB: {r}, {g}, {b}\n")
+            print(f"color avg RGB: {r}, {g}, {b}\n")
 
         if paint is True:
             # draw a bounding box around the detected result and display the image
@@ -437,26 +508,30 @@ class CalibrationView(QMainWindow):
         # g = np.average(pix[startX:endX,startY:endY,1])
         # b = np.average(pix[startX:endX,startY:endY,2])
         #
-        # self.console.write(f"color avg BGR: {r}, {g}, {b}\n")
-        # print(f"color avg BGR: {r}, {g}, {b}\n")
-        r = np.average(pix[startY:endY,startX:endX,0])
-        g = np.average(pix[startY:endY,startX:endX,1])
-        b = np.average(pix[startY:endY,startX:endX,2])
+        # self.console.write(f"color avg RGB: {r}, {g}, {b}\n")
+        # print(f"color avg RGB: {r}, {g}, {b}\n")
+        r = int(np.average(pix[startY:endY,startX:endX,0]))
+        g = int(np.average(pix[startY:endY,startX:endX,1]))
+        b = int(np.average(pix[startY:endY,startX:endX,2]))
 
-        self.console.write(f"color avg BGR: {r}, {g}, {b}\n")
+        self.console.write(f"color avg RGB: {r}, {g}, {b}\n")
         if debug:
-            print(f"color avg BGR: {r}, {g}, {b}\n")
+            print(f"color avg RGB: {r}, {g}, {b}\n")
 
 
 
-    def template_matching(self, template_file=None, template_edge=None, frame=None, debug=True, paint=True):
+    def template_matching(self, template_file=None, frame=None,  threshold=0.60, paint=True):
 
+        COLOR_DISTANCE_THRESHOLD = 10.0
+        COLOR_DIFFERENCE_THRESHOLD = 30
         # load the image, convert it to grayscale, and initialize the
         # bookkeeping variable to keep track of the matched region
         if frame is not None:
-            img = frame
+            # img = frame
+            img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         else:
-            img = cv2.imread(self.cb_page.currentText(), 0)
+            # img = cv2.imread(self.cb_page.currentText(), 0)
+            img = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
         template = cv2.imread(template_file, 0)
         w, h = template.shape[::-1]
 
@@ -464,7 +539,7 @@ class CalibrationView(QMainWindow):
         methods = ['cv2.TM_CCOEFF', 'cv2.TM_CCOEFF_NORMED', 'cv2.TM_CCORR',
                    'cv2.TM_CCORR_NORMED', 'cv2.TM_SQDIFF', 'cv2.TM_SQDIFF_NORMED']
 
-        for meth in ['cv2.TM_SQDIFF']: # methods:
+        for meth in ['cv2.TM_SQDIFF_NORMED']: # methods:
             method = eval(meth)
 
             # Apply template Matching
@@ -474,22 +549,54 @@ class CalibrationView(QMainWindow):
             # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
             if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
                 top_left = min_loc
+                val = min_val
+                if  max_val == min_val:
+                    result = 0.0
+                else:
+                    result = 1.0 - val / (max_val) # - min_val)
             else:
                 top_left = max_loc
+                val = max_val
+                if max_val == min_val:
+                    result = 0.0
+                else:
+                    result = val / (max_val) # - min_val)
             bottom_right = (top_left[0] + w, top_left[1] + h)
+            (startX, startY) = top_left
+            (endX, endY) = bottom_right
+
+            b = int(np.average(self.frame[startY:endY, startX:endX, 0]))
+            g = int(np.average(self.frame[startY:endY, startX:endX, 1]))
+            r = int(np.average(self.frame[startY:endY, startX:endX, 2]))
+
+            # r = np.average(self.frame[startX:endX, startY:endY, 0])
+            # g = np.average(self.frame[startX:endX, startY:endY, 1])
+            # b = np.average(self.frame[startX:endX, startY:endY, 2])
+
+            self.console.write(f"color avg RGB: {r}, {g}, {b}\n")
+            print(f"color avg RGB: {r}, {g}, {b}\n")
+            delta = compare_rgb((r, g, b),self.template_rgb)
+
+            self.console.write(f"result:{result}, distance:{delta}, loc:{top_left, bottom_right}")
+            print(f"result:{result}, distance:{delta}")
+            if result < threshold:
+               print(f"{meth}: no template found. threshold {result} <  {threshold}")
+            elif delta[0] > COLOR_DISTANCE_THRESHOLD:
+                print(f"{meth}: no template found. delta_e {delta} > {COLOR_DISTANCE_THRESHOLD}")
+            elif sum(delta[1:]) > COLOR_DIFFERENCE_THRESHOLD:
+                print(f"{meth}: no template found. delta_rgb {delta} > {COLOR_DIFFERENCE_THRESHOLD}")
+            else:
+                # check to see if the iteration should be visualized
+                # cv2.waitKey(0)
+                if paint is True:
+                    # draw a bounding box around the detected result and display the image
+                    frame = self.frame.copy()
+                    cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 0, 255), 5)
+                    print(f"{meth}: found template at {top_left}, {bottom_right}, val: {val}({min_val, max_val}), result: {result}")
+                    self.image_item_page.setImage(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                    QtGui.QGuiApplication.processEvents()
 
 
-            # check to see if the iteration should be visualized
-            # cv2.waitKey(0)
-            if paint is True:
-                # draw a bounding box around the detected result and display the image
-                (startX, startY) = top_left
-                (endX, endY) = bottom_right
-                img = cv2.imread(self.cb_page.currentText())
-                cv2.rectangle(img, (startX, startY), (endX, endY), (0, 0, 255), 5)
-
-                self.image_item_page.setImage(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                QtGui.QGuiApplication.processEvents()
 
 ## Start Qt event loop unless running in interactive mode or using pyside.
 if __name__ == '__main__':
@@ -559,6 +666,15 @@ if __name__ == '__main__':
     if len(templates) == 0:
         print("error: no template found in {}".format(template_file))
         exit(2)
+
+    settings_file= "./settings.json"
+    with open(settings_file) as f:
+        data = json.load(f)
+
+    print(f"device id: {data['device_id']}, user email:{data['user_email']}, user password:{data['user_password']} ")
+    for page, value in data["pages"].items():
+        print(f"{page}:{value}")
+
 
     app = QtGui.QApplication([])
 

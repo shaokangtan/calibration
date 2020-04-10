@@ -112,6 +112,7 @@ class CalibrationView(QMainWindow):
         self.cb_video_capture.addItem("0")
         self.cb_video_capture.addItem("1")
         self.cb_video_capture.addItem("udp://127.0.0.1:10000")
+        self.cb_video_capture.addItem("udp://192.168.8.19:10000")
         self.btn_start_video = QPushButton('Start video')
         self.btn_stop_video = QPushButton('Stop video')
 
@@ -258,7 +259,7 @@ class CalibrationView(QMainWindow):
 
         # Read until video is completed
         frames = 0
-        start = time.clock()
+        start = time.time()
         while cap.isOpened() and self.start_streaming is True:
             # Capture frame-by-frame
             ret, self.frame = cap.read()
@@ -273,8 +274,11 @@ class CalibrationView(QMainWindow):
             else:
                 break
             QtGui.QGuiApplication.processEvents()
+            if time.time() > start + 10 :
+                print(f"{frames / (time.time() - start)} fp/s")
+                start = time.time()
 
-        print(f"{frames / (time.clock() - start)} fp/s")
+        print(f"{frames / (time.time() - start)} fp/s")
         # When everything done, release the video capture object
         cap.release()
         # Closes all the frames
@@ -307,7 +311,14 @@ class CalibrationView(QMainWindow):
 
     def template_rgb_avg(self):
         pic = Image.open(self.cb_template.currentText())
-        pix = np.array(pic.getdata()).reshape(pic.size[1], pic.size[0], 4)
+        print(f"template_rgb_avg: {pic.size}, mode: {pic.mode}")
+        if pic.mode == "RGBA":
+            colors_depth = 4
+        elif pic.mode == "RGB":
+            colors_depth = 3
+        else:
+            assert False, "Unknown color format. Support RGBA and RGB only"
+        pix = np.array(pic.getdata()).reshape(pic.size[1], pic.size[0], colors_depth)
         r = int(np.average(pix[:,:,0]))
         g = int(np.average(pix[:,:,1]))
         b = int(np.average(pix[:,:,2]))

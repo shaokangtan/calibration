@@ -1,6 +1,7 @@
 # install color math:
 # sudo pip install colormath
 # ref: https://en.wikipedia.org/wiki/CIE_1931_color_space
+# http://hanzratech.in/2015/01/16/color-difference-between-2-colors-using-python.html
 from colormath.color_objects import sRGBColor, LabColor
 from colormath.color_conversions import convert_color
 from colormath.color_diff import delta_e_cie2000

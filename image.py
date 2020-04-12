@@ -2,6 +2,8 @@
 # sudo pip install colormath
 # ref: https://en.wikipedia.org/wiki/CIE_1931_color_space
 # http://hanzratech.in/2015/01/16/color-difference-between-2-colors-using-python.html
+# transformation
+# https://opencv-python-tutroals.readthedocs.io/en/latest/py_tutorials/py_imgproc/py_geometric_transformations/py_geometric_transformations.html#affine-transformation
 from colormath.color_objects import sRGBColor, LabColor
 from colormath.color_conversions import convert_color
 from colormath.color_diff import delta_e_cie2000

@@ -18,13 +18,13 @@ frames = 0
 while(True):
     ret, frame = cap.read()
     frames += 1
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2BGRA)
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     cv2.imshow('frame', rgb)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         out = cv2.imwrite('capture.jpg', frame)
         break
 
-print(f"{frames/(time.clock()-start)} fp/s" )
+print(f"{frames/(time.clock()-start)} fp/s")
 cap.release()
 cv2.destroyAllWindows()

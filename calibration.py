@@ -22,6 +22,17 @@ import time
 from image import compare_rgb
 VERSION = "0.0.1"
 
+class MyImageItem(pg.ImageItem):
+    def __init__(self, image,  console, **kwargs):
+        super().__init__(image, **kwargs)
+        self.console = console
+
+    def mouseClickEvent(self, ev):
+        super().mouseClickEvent(ev)
+        if ev.button() == QtCore.Qt.LeftButton:
+            #print(f"mouse pos: {ev.pos()}")
+            # self.console.write(f"mouse pos: {ev.pos()[0]:.2f}, {ev.pos()[1]:.2f}")
+            self.console.write(f"mouse pos: {ev.pos()[0]:.0f}, {ev.pos()[1]:.0f}\n")
 
 class CalibrationView(QMainWindow):
     def __init__(self, pages, templates, parent=None, title=None, verbose=False):
@@ -32,30 +43,57 @@ class CalibrationView(QMainWindow):
         self.videos = []
         self.pages = list(pages)
         self.templates = list(templates)
+        self.DEF_COLOR_DISTANCE_THRESHOLD = "10.0"
+        self.DEF_RGB_DIFFERENCE_THRESHOLD = "30"
+        self.DEF_SCREEN_DIM = "1920,1080"
+        self.blurring_types = ["Averaging", "Gaussian Filtering", "Median Filtering",  "Bilateral Filtering"]
+        self.color_templates = ["images/color_calibration/blue_tall.png", "images/color_calibration/cyan_tall.png",
+                                "images/color_calibration/green_tall.png", "images/color_calibration/purple_short.png",
+                                "images/color_calibration/yellow_short.png", "images/color_calibration/blue_short.png",
+                                "images/color_calibration/cyan_short.png", "images/color_calibration/gray_gradient.png",
+                                "images/color_calibration/magenta_tall.png", "images/color_calibration/red_short.png",
+                                "images/color_calibration/yellow_tall.png"]
         self.verbose = verbose
         self.area = DockArea()
         self.setCentralWidget(self.area)
         self.resize(1024, 900)
         self.setWindowTitle(title)
         self.start_streaming = False
+        self.deskewed_frame = None
 
         ## Create docks, place them into the window one at a time.
         ## Note that size arguments are only a suggestion; docks will still have to
         ## fill the entire dock self.area and obey the limits of their internal widgets.
-        self.dk_page = Dock("page", size=(1024, 720))  ## give this dock the minimum possible size
+        self.dk_page = Dock("page", size=(1280, 720))  ## give this dock the minimum possible size
         self.dk_template = Dock("template", size=(200, 280))
-        self.dk_control = Dock("command", size=(200, 280))
+        self.dk_control = Dock("general", size=(240, 280))
         self.dk_info = Dock("info", size=(800, 280))
+        # color
+        self.dk_color = Dock("color", size=(240, 280))
+
+        # deskew
+        self.dk_deskew = Dock("deskew", size=(240, 280))
+
+        # noise
+        self.dk_denoise = Dock("denoise", size=(240, 280))
 
         self.area.addDock(self.dk_page, 'right')
         self.area.addDock(self.dk_template, 'bottom', self.dk_page)
-        self.area.addDock(self.dk_control, 'right', self.dk_template)
-        self.area.addDock(self.dk_info, 'right', self.dk_control)
+        self.area.addDock(self.dk_denoise, 'right', self.dk_template)
+        self.area.addDock(self.dk_info, 'right', self.dk_denoise)
+        self.area.moveDock(self.dk_color, 'above', self.dk_denoise)
+        self.area.moveDock(self.dk_deskew, 'above', self.dk_color)
+        self.area.moveDock(self.dk_control, 'above', self.dk_deskew)
+
+        # info
+        self.widget_info = pg.LayoutWidget()
+        self.console = ConsoleWidget()
+        self.dk_info.addWidget(self.console)
 
         # page
         img_bgr = asarray(cv2.imread(pages[0]))
         self.frame = img_bgr
-        self.image_item_page = pg.ImageItem(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB), axisOrder='row-major')
+        self.image_item_page = MyImageItem(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB), console=self.console, axisOrder='row-major')
         self.image_view = pg.ImageView(imageItem=self.image_item_page)
         self.dk_page.addWidget(self.image_view)
 
@@ -71,34 +109,110 @@ class CalibrationView(QMainWindow):
         self.template_view = pg.ImageView(imageItem=self.image_item_template)
         self.dk_template.addWidget(self.template_view)
 
-        # info
-        self.widget_info = pg.LayoutWidget()
-        self.console = ConsoleWidget()
-        self.dk_info.addWidget(self.console)
 
-        # control
+        # deskew
+        self.label_deskew_dim = QLabel("screen dimension(w,h):")
+        self.edit_deskew_dim = QLineEdit()
+        self.edit_deskew_dim.setText(self.DEF_SCREEN_DIM)
+        self.label_deskew_top_left = QLabel("top left anchor(x,y):")
+        self.edit_deskew_top_left = QLineEdit()
+        self.label_deskew_top_right = QLabel("top right anchor(x,y):")
+        self.edit_deskew_top_right = QLineEdit()
+        self.label_deskew_bot_left = QLabel("bottom left anchor(x,y):")
+        self.edit_deskew_bot_left = QLineEdit()
+        self.label_deskew_bot_right = QLabel("bottom right anchor(x,y):")
+        self.edit_deskew_bot_right = QLineEdit()
+        self.btn_search_anchors = QPushButton('search anchors automatically')
+        self.btn_deskew = QPushButton('deskew screen')
+        self.btn_save_deskewed_screen = QPushButton('save deskewed screen')
+        self.dk_deskew.addWidget(self.label_deskew_dim, row=0, col=0)
+        self.dk_deskew.addWidget(self.edit_deskew_dim, row=0, col=1)
+        self.dk_deskew.addWidget(self.label_deskew_top_left, row=1, col=0)
+        self.dk_deskew.addWidget(self.edit_deskew_top_left, row=1, col=1)
+        self.dk_deskew.addWidget(self.label_deskew_top_right, row=1, col=2)
+        self.dk_deskew.addWidget(self.edit_deskew_top_right, row=1, col=3)
+        self.dk_deskew.addWidget(self.label_deskew_bot_left, row=2, col=0)
+        self.dk_deskew.addWidget(self.edit_deskew_bot_left, row=2, col=1)
+        self.dk_deskew.addWidget(self.label_deskew_bot_right, row=2, col=2)
+        self.dk_deskew.addWidget(self.edit_deskew_bot_right, row=2, col=3)
+        self.dk_deskew.addWidget(self.btn_search_anchors, row=3, col=0)
+        self.dk_deskew.addWidget(self.btn_deskew, row=3, col=1)
+        self.dk_deskew.addWidget(self.btn_save_deskewed_screen, row=3, col=2)
+
+        self.btn_save_deskewed_screen.clicked.connect(self.on_btn_save_deskewed_screen)
+        self.btn_search_anchors.clicked.connect(self.on_btn_search_anchors)
+        self.btn_deskew.clicked.connect(self.on_btn_deskew)
+
+        # noise removal/image blurring
+        self.label_image_blurring = QLabel("Denoise type:")
+        self.cb_image_blurring = QComboBox()
+        for blurring_type in self.blurring_types:
+            self.cb_image_blurring.addItem(blurring_type)
+        self.cb_image_blurring.currentIndexChanged.connect(self.on_cb_image_blurring_type_change)
+        self.btn_image_blurring = QPushButton('apply')
+        self.btn_save_denoised_screen = QPushButton('save denoised screen')
+        self.btn_save_denoised_screen.clicked.connect(self.on_btn_save_denoised_screen)
+        self.btn_image_blurring.clicked.connect(self.on_btn_image_blurring)
+        self.dk_denoise.addWidget(self.label_image_blurring, row=0, col=0)
+        self.dk_denoise.addWidget(self.cb_image_blurring, row=0, col=1)
+        self.dk_denoise.addWidget(self.btn_image_blurring, row=0, col=2)
+        self.dk_denoise.addWidget(self.btn_save_denoised_screen, row=0, col=3)
+
+        # color calibration
+        self.label_color_calibration = QLabel("color template:")
+        self.cb_color_calibration_templates = QComboBox()
+        for color_template in self.color_templates:
+            self.cb_color_calibration_templates.addItem(color_template)
+        self.cb_color_calibration_templates.currentIndexChanged.connect(self.on_cb_color_calibration_template_change)
+        self.btn_color_calibration_search = QPushButton('search template')
+        # self.btn_color_calibration_search.setEnabled(True)
+        self.btn_color_calibration_search.clicked.connect(self.on_btn_color_calibration_search)
+        self.btn_color_calibration_search_all = QPushButton('search all templates')
+        #self.btn_color_calibration_search_all.setEnabled(True)
+        self.label_color_space_threshold = QLabel("color space threshold:")
+        self.label_rgb_diff_threshold = QLabel("RGB difference threshold:")
+        self.edit_color_space_threshold = QLineEdit()
+        self.edit_color_space_threshold.setText(self.DEF_COLOR_DISTANCE_THRESHOLD)
+        self.edit_rgb_diff_threshold = QLineEdit()
+        self.edit_rgb_diff_threshold.setText(self.DEF_RGB_DIFFERENCE_THRESHOLD)
+        self.btn_default_threshold = QPushButton('default threshold')
+        # self.btn_default_threshold.setEnabled(True)
+        self.btn_default_threshold.clicked.connect(self.on_btn_default_threshold)
+        self.btn_color_calibration_search_all.clicked.connect(self.on_btn_color_calibration_search_all)
+        self.dk_color.addWidget(self.label_color_calibration, row=0, col=0)
+        self.dk_color.addWidget(self.cb_color_calibration_templates, row=0, col=1)
+        self.dk_color.addWidget(self.btn_color_calibration_search, row=0, col=2)
+        self.dk_color.addWidget(self.btn_color_calibration_search_all, row=0, col=3)
+        self.dk_color.addWidget(self.label_color_space_threshold, row=1, col=0)
+        self.dk_color.addWidget(self.edit_color_space_threshold, row=1, col=1)
+        self.dk_color.addWidget(self.label_rgb_diff_threshold, row=1, col=2)
+        self.dk_color.addWidget(self.edit_rgb_diff_threshold, row=1, col=3)
+        self.dk_color.addWidget(self.btn_default_threshold, row=2, col=1)
+
+        # general
         self.label_video = QLabel("Video:")
         self.cb_video = QComboBox()
-        self.cb_video.currentIndexChanged.connect(self.on_video_change)
+        self.cb_video.currentIndexChanged.connect(self.on_cb_video_change)
+
 
         self.label_page = QLabel("Page:")
         self.cb_page = QComboBox()
         for page in self.pages:
             self.cb_page.addItem(page)
-        self.cb_page.currentIndexChanged.connect(self.on_page_change)
+        self.cb_page.currentIndexChanged.connect(self.on_cb_page_change)
 
         self.label_template = QLabel("Template:")
         self.cb_template = QComboBox()
         for template in self.templates:
             self.cb_template.addItem(template)
-        self.cb_template.currentIndexChanged.connect(self.on_template_change)
-        self.template_rgb_avg()
+        self.cb_template.currentIndexChanged.connect(self.on_cb_template_change)
+        self.template_rgb_avg(self.cb_template.currentText())
 
         self.btn_save_dockstn = QPushButton('Save dock state')
         self.btn_restore_dock = QPushButton('Restore dock state')
         self.btn_restore_dock.setEnabled(False)
-        self.btn_save_dockstn.clicked.connect(self.save)
-        self.btn_restore_dock.clicked.connect(self.load)
+        self.btn_save_dockstn.clicked.connect(self.btn_save)
+        self.btn_restore_dock.clicked.connect(self.btn_load)
 
         self.btn_load_videos = QPushButton('Load videos...')
         self.btn_load_videos.clicked.connect(self.on_load_videos)
@@ -111,8 +225,9 @@ class CalibrationView(QMainWindow):
         self.cb_video_capture = QComboBox()
         self.cb_video_capture.addItem("0")
         self.cb_video_capture.addItem("1")
-        self.cb_video_capture.addItem("udp://127.0.0.1:10000")
-        self.cb_video_capture.addItem("udp://192.168.8.19:10000")
+        self.cb_video_capture.addItem("udp://127.0.0.1:12345")
+        self.cb_video_capture.addItem("udp://192.168.8.19:12345")
+        self.cb_video_capture.addItem("udp://192.168.8.3:12345")
         self.btn_start_video = QPushButton('Start video')
         self.btn_stop_video = QPushButton('Stop video')
 
@@ -121,38 +236,40 @@ class CalibrationView(QMainWindow):
         self.btn_search = QPushButton('Search template')
         self.btn_search_all = QPushButton('Search all templates')
         self.cb_video_capture.currentIndexChanged.connect(self.on_video_capture_change)
-        self.btn_start_video.clicked.connect(self.start_video)
-        self.btn_stop_video.clicked.connect(self.stop_video)
-        self.btn_start_camera.clicked.connect(self.start_camera)
-        self.btn_stop_camera.clicked.connect(self.stop_camera)
-        self.btn_search.clicked.connect(self.search)
+        self.btn_start_video.clicked.connect(self.on_btn_start_video)
+        self.btn_stop_video.clicked.connect(self.on_btn_stop_video)
+        self.btn_start_camera.clicked.connect(self.on_btn_start_camera)
+        self.btn_stop_camera.clicked.connect(self.on_btn_start_camera)
+        self.btn_search.clicked.connect(self.on_btn_search)
         self.btn_search_all.clicked.connect(self.run_all)
         self.btn_ocr_roi = QPushButton('OCR ROI')
-        self.btn_ocr_roi.clicked.connect(self.on_ocr_roi)
-        self.btn_export_roi = QPushButton('Save ROI')
-        self.btn_export_roi.clicked.connect(self.on_export_rect_roi)
+        self.btn_ocr_roi.clicked.connect(self.on_btn_ocr_roi)
+        self.btn_save_roi = QPushButton('Save ROI')
+        self.btn_save_roi.clicked.connect(self.on_btn_save_roi)
 
         self.cb_visual = QCheckBox('Visual', self)
         self.cb_export = QCheckBox('Export', self)
 
         self.dk_control.addWidget(self.label_page, row=0, col=0)
-        self.dk_control.addWidget(self.cb_page, row=0, col=1, colspan=2)
-        self.dk_control.addWidget(self.btn_load_pages, row=0, col=3)
+        self.dk_control.addWidget(self.cb_page, row=0, col=1)
+        self.dk_control.addWidget(self.btn_load_pages, row=0, col=2)
+
         self.dk_control.addWidget(self.label_template, row=1, col=0)
-        self.dk_control.addWidget(self.cb_template, row=1, col=1, colspan=2)
-        self.dk_control.addWidget(self.btn_load_templates, row=1, col=3)
+        self.dk_control.addWidget(self.cb_template, row=1, col=1)
+        self.dk_control.addWidget(self.btn_load_templates, row=1, col=2)
 
         self.dk_control.addWidget(self.btn_search, row=2, col=0)
         self.dk_control.addWidget(self.btn_search_all, row=2, col=1)
         self.dk_control.addWidget(self.btn_ocr_roi, row=2, col=2)
-        self.dk_control.addWidget(self.btn_export_roi, row=2, col=3)
+        self.dk_control.addWidget(self.btn_save_roi, row=2, col=3)
+
         self.dk_control.addWidget(self.cb_visual, row=3, col=0)
         self.dk_control.addWidget(self.cb_export, row=3, col=1)
         self.dk_control.addWidget(self.btn_save_dockstn, row=3, col=2)
         self.dk_control.addWidget(self.btn_restore_dock, row=3, col=3)
 
         self.dk_control.addWidget(self.label_video, row=4, col=0)
-        self.dk_control.addWidget(self.cb_video, row=4, col=1, colspan=1)
+        self.dk_control.addWidget(self.cb_video, row=4, col=1)
         self.dk_control.addWidget(self.btn_load_videos, row=4, col=2)
         self.dk_control.addWidget(self.btn_start_video, row=4, col=3)
         self.dk_control.addWidget(self.btn_stop_video, row=4, col=4)
@@ -164,29 +281,29 @@ class CalibrationView(QMainWindow):
 
         self.show()
 
-    def search(self):
+    def on_btn_search(self):
         visualize = self.cb_visual.isChecked()
         self.template_matching(self.cb_template.currentText())
 
-    def start_video(self):
+    def on_btn_start_video(self):
         # self.sim(calculate=False)
         self.play_video()
 
-    def start_camera(self):
+    def on_btn_start_camera(self):
         if self.start_streaming is False:
             self.start_streaming = True
             self.streaming(self.cb_video_capture.currentText())
 
-    def stop_video(self):
+    def on_btn_stop_video(self):
         self.start_streaming = False
 
-    def stop_camera(self):
+    def on_btn_start_camera(self):
         self.start_streaming = False
 
     def streaming(self, camera="0"):
         import cv2
         import numpy as np
-        from goprocam import GoProCamera
+        #from goprocam import GoProCamera
         # from goprocam import constants
         # cascPath = "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml"
         # faceCascade = cv2.CascadeClassifier(cascPath)
@@ -194,17 +311,28 @@ class CalibrationView(QMainWindow):
         if camera.isnumeric():
             cap = cv2.VideoCapture(int(camera))
         else:
-            gpCam = GoProCamera.GoPro()
+            #gpCam = GoProCamera.GoPro()
             cap = cv2.VideoCapture(camera)
         frames = 0
-        start = time.clock()
+        start = time.time()
+        # frame control for player
+        player_frame_control = False
+        player_fps = 10
+        player_spf = 60 / player_fps
         while self.start_streaming is True:
+            if player_frame_control is True and int(time.time() * 1000) % player_spf != 0:
+                continue
             ret, self.frame = cap.read()
             frames += 1
             self.image_item_page.setImage(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB))
             QtGui.QGuiApplication.processEvents()
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            if time.time() > start + 10 :
+                print(f"{frames / (time.time() - start)} fp/s")
+                start = time.time()
+                frames =0
+
+            # if cv2.waitKey(1) & 0xFF == ord('q'):
+            #     break
         cap.release()
         cv2.destroyAllWindows()
         print(f"{frames / (time.clock() - start)} fp/s")
@@ -268,8 +396,8 @@ class CalibrationView(QMainWindow):
                 self.image_item_page.setImage(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB))
 
                 # Press Q on keyboard to exit
-                if cv2.waitKey(25) & 0xFF == ord('q'):
-                    break
+                # if cv2.waitKey(25) & 0xFF == ord('q'):
+                #     break
             # Break the loop
             else:
                 break
@@ -277,6 +405,8 @@ class CalibrationView(QMainWindow):
             if time.time() > start + 10 :
                 print(f"{frames / (time.time() - start)} fp/s")
                 start = time.time()
+                frames = 0
+
 
         print(f"{frames / (time.time() - start)} fp/s")
         # When everything done, release the video capture object
@@ -309,8 +439,8 @@ class CalibrationView(QMainWindow):
         self.console.write(f"ROI avg RGB: {r}, {g}, {b}, template distance: {delta}\n")
         print(f"ROI avg RGB: {r}, {g}, {b}, template avg RGB: {self.template_rgb}, template distance:{delta}")
 
-    def template_rgb_avg(self):
-        pic = Image.open(self.cb_template.currentText())
+    def template_rgb_avg(self, template_file):
+        pic = Image.open(template_file)
         print(f"template_rgb_avg: {pic.size}, mode: {pic.mode}")
         if pic.mode == "RGBA":
             colors_depth = 4
@@ -348,7 +478,6 @@ class CalibrationView(QMainWindow):
             # upload pages listbox
             self.cb_page.setCurrentIndex(len(self.pages)-1)
 
-
     def on_load_templates(self):
         fnames = QFileDialog.getOpenFileNames(self, '=Load templates','./', "Image files (*.png)")
         print(f"load template: {fnames}")
@@ -361,7 +490,7 @@ class CalibrationView(QMainWindow):
     def on_video_capture_change(self):
         pass
 
-    def on_ocr_roi(self):
+    def on_btn_ocr_roi(self):
         assert self.frame is not None
         # im = Image.open(self.cb_page.currentText())
         dim = (int(self.rect_roi.pos()[0]), int(self.rect_roi.pos()[1]),
@@ -375,8 +504,7 @@ class CalibrationView(QMainWindow):
         print(f"ocr roi pos: {dim}, result: {text}")
         self.console.write(f"ocr roi pos: {dim}, result: {text}")
 
-
-    def on_export_rect_roi(self):
+    def on_btn_save_roi(self):
         print("roi pos: {}".format(self.rect_roi.pos()))
         print("roi size: {}".format(self.rect_roi.size()))
 
@@ -393,27 +521,76 @@ class CalibrationView(QMainWindow):
         region.save(name)
         self.console.write(f"ROI image: {name} is created \n")
 
-    def save(self):
+    def btn_save(self):
         self.state = self.area.saveState()
         self.btn_restore_dock.setEnabled(True)
 
-    def load(self):
+    def btn_load(self):
         self.area.restoreState(self.state)
 
-    def on_template_change(self, i):
+    def on_cb_template_change(self, i):
         img_bgr = asarray(cv2.imread(self.templates[i]))
         self.image_item_template.setImage(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
-        self.template_rgb_avg()
+        self.template_rgb_avg(self.templates[i])
 
-    def on_page_change(self, i):
+    def on_cb_page_change(self, i):
         img_bgr = asarray(cv2.imread(self.pages[i]))
         self.image_item_page.setImage(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
         self.frame = img_bgr
 
-    def on_video_change(self, i):
+    def on_cb_video_change(self, i):
         pass
         # img_bgr = asarray(cv2.imread(self.videos[i]))
         # self.image_item_page.setImage(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
+
+    def on_cb_color_calibration_template_change(self, i):
+        img_bgr = asarray(cv2.imread(self.color_templates[i]))
+        self.image_item_template.setImage(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
+        self.template_rgb_avg(self.color_templates[i])
+
+    def on_cb_image_blurring_type_change(self, i):
+        pass
+
+    def on_btn_image_blurring(self):
+        pass
+
+    def on_btn_color_calibration_search(self):
+        self.template_matching(self.cb_color_calibration_templates.currentText())
+
+    def on_btn_color_calibration_search_all(self):
+        pass
+
+    def on_btn_default_threshold(self):
+        self.edit_rgb_diff_threshold.setText(self.DEF_RGB_DIFFERENCE_THRESHOLD)
+        self.edit_color_space_threshold.setText(self.DEF_COLOR_DISTANCE_THRESHOLD)
+
+    def on_btn_search_anchors(self):
+        pass
+
+    def on_btn_deskew(self):
+        img = self.frame  # cv2.imread('sudokusmall.png')
+        rows, cols, ch = img.shape
+        top_left = list(map(int, self.edit_deskew_top_left.text().split(',')))
+        top_right = list(map(int, self.edit_deskew_top_right.text().split(',')))
+        bot_left = list(map(int, self.edit_deskew_bot_left.text().split(',')))
+        bot_right = list(map(int, self.edit_deskew_bot_right.text().split(',')))
+        pts1 = np.float32([top_left, top_right, bot_left, bot_right])
+        width,height =  list(map(int, self.edit_deskew_dim.text().split(',')))
+        pts2 = np.float32([[0, 0], [width, 0], [0, 1080], [width, height]])
+        M = cv2.getPerspectiveTransform(pts1, pts2)
+        self.deskewed_frame = cv2.warpPerspective(img, M, (width, height))
+        self.image_item_page.setImage(cv2.cvtColor(self.deskewed_frame, cv2.COLOR_BGR2RGB))
+        self.frame = self.deskewed_frame
+
+    def on_btn_save_denoised_screen(self):
+        pass
+
+    def on_btn_save_deskewed_screen(self):
+        width, height =  list(map(int, self.edit_deskew_dim.text().split(',')))
+        basename = ntpath.basename(self.cb_page.currentText()).strip(".png")
+        name = "{}_{}x{}.png".format(basename, width, height)
+        cv2.imwrite(name, self.deskewed_frame)
+        self.console.write(f"deskewed screen saved ase: {name}  \n")
 
     def multi_scale_template_matching(self, template_file=None, template_edge=None, frame=None, debug=True, paint=True):
         if template_edge is None:
@@ -529,12 +706,10 @@ class CalibrationView(QMainWindow):
         if debug:
             print(f"color avg RGB: {r}, {g}, {b}\n")
 
-
-
     def template_matching(self, template_file=None, frame=None,  threshold=0.60, paint=True):
 
-        COLOR_DISTANCE_THRESHOLD = 10.0
-        COLOR_DIFFERENCE_THRESHOLD = 30
+        COLOR_DISTANCE_THRESHOLD = float(self.edit_color_space_threshold.text())
+        RGB_DIFFERENCE_THRESHOLD = int(self.edit_rgb_diff_threshold.text())
         # load the image, convert it to grayscale, and initialize the
         # bookkeeping variable to keep track of the matched region
         if frame is not None:
@@ -588,14 +763,14 @@ class CalibrationView(QMainWindow):
             print(f"color avg RGB: {r}, {g}, {b}\n")
             delta = compare_rgb((r, g, b),self.template_rgb)
 
-            self.console.write(f"result:{result}, distance:{delta}, loc:{top_left, bottom_right}")
-            print(f"result:{result}, distance:{delta}")
+            self.console.write(f"result:{result}, distance(color space, r,g,b):{delta[0]:.2f},{delta[1]},{delta[2]},{delta[3]}, loc:{top_left, bottom_right}")
+            print(f"result:{result}, distance(color space, r,g,b):{delta}")
             if result < threshold:
                print(f"{meth}: no template found. threshold {result} <  {threshold}")
             elif delta[0] > COLOR_DISTANCE_THRESHOLD:
-                print(f"{meth}: no template found. delta_e {delta} > {COLOR_DISTANCE_THRESHOLD}")
-            elif sum(delta[1:]) > COLOR_DIFFERENCE_THRESHOLD:
-                print(f"{meth}: no template found. delta_rgb {delta} > {COLOR_DIFFERENCE_THRESHOLD}")
+                print(f"{meth}: no template found. delta_e {delta[0]:.2f} > {COLOR_DISTANCE_THRESHOLD}")
+            elif sum(delta[1:]) > RGB_DIFFERENCE_THRESHOLD:
+                print(f"{meth}: no template found. delta_rgb {delta[1:]} > {RGB_DIFFERENCE_THRESHOLD}")
             else:
                 # check to see if the iteration should be visualized
                 # cv2.waitKey(0)
@@ -606,7 +781,6 @@ class CalibrationView(QMainWindow):
                     print(f"{meth}: found template at {top_left}, {bottom_right}, val: {val}({min_val, max_val}), result: {result}")
                     self.image_item_page.setImage(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
                     QtGui.QGuiApplication.processEvents()
-
 
 
 ## Start Qt event loop unless running in interactive mode or using pyside.

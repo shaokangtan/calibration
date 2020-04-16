@@ -46,7 +46,14 @@ class CalibrationView(QMainWindow):
         self.DEF_COLOR_DISTANCE_THRESHOLD = "10.0"
         self.DEF_RGB_DIFFERENCE_THRESHOLD = "30"
         self.DEF_SCREEN_DIM = "1920,1080"
-        self.blurring_types = ["Averaging", "Gaussian Filtering", "Median Filtering",  "Bilateral Filtering"]
+        self.DEF_SCALE_DIM = "1280,720"
+        self.DEF_TEMPLATE_SEARCH_REGION = "0, 0, 1280,720"
+        self.TEMPLATE_MATCH_METHODS = ['cv2.TM_CCOEFF', 'cv2.TM_CCOEFF_NORMED',
+                                       'cv2.TM_CCORR', 'cv2.TM_CCORR_NORMED',
+                                       'cv2.TM_SQDIFF', 'cv2.TM_SQDIFF_NORMED']
+        self.DEF_TEMPLATE_SEARCH_METHOD = 'cv2.TM_CCORR_NORMED'
+
+        self.blurring_types = ["Averaging 3x3", "Averaging 5x5", "Gaussian Filtering 3x3", "Gaussian Filtering 5x5", "Median Filtering 3", "Median Filtering", "Bilateral Filtering"]
         self.color_templates = ["images/color_calibration/blue_tall.png", "images/color_calibration/cyan_tall.png",
                                 "images/color_calibration/green_tall.png", "images/color_calibration/purple_short.png",
                                 "images/color_calibration/yellow_short.png", "images/color_calibration/blue_short.png",
@@ -66,8 +73,8 @@ class CalibrationView(QMainWindow):
         ## fill the entire dock self.area and obey the limits of their internal widgets.
         self.dk_page = Dock("page", size=(1280, 720))  ## give this dock the minimum possible size
         self.dk_template = Dock("template", size=(200, 280))
-        self.dk_control = Dock("general", size=(240, 280))
-        self.dk_info = Dock("info", size=(800, 280))
+        self.dk_control = Dock("general", size=(800, 280))
+        self.dk_info = Dock("info", size=(2400, 280))
         # color
         self.dk_color = Dock("color", size=(240, 280))
 
@@ -111,22 +118,28 @@ class CalibrationView(QMainWindow):
 
 
         # deskew
-        self.label_deskew_dim = QLabel("screen dimension(w,h):")
+        self.label_deskew_dim = QLabel("Screen size(w,h):")
         self.edit_deskew_dim = QLineEdit()
         self.edit_deskew_dim.setText(self.DEF_SCREEN_DIM)
-        self.label_deskew_top_left = QLabel("top left anchor(x,y):")
+        self.label_deskew_top_left = QLabel("Top left anchor(x,y):")
         self.edit_deskew_top_left = QLineEdit()
-        self.label_deskew_top_right = QLabel("top right anchor(x,y):")
+        self.label_deskew_top_right = QLabel("Top right anchor(x,y):")
         self.edit_deskew_top_right = QLineEdit()
-        self.label_deskew_bot_left = QLabel("bottom left anchor(x,y):")
+        self.label_deskew_bot_left = QLabel("Bottom left anchor(x,y):")
         self.edit_deskew_bot_left = QLineEdit()
-        self.label_deskew_bot_right = QLabel("bottom right anchor(x,y):")
+        self.label_deskew_bot_right = QLabel("Bottom right anchor(x,y):")
         self.edit_deskew_bot_right = QLineEdit()
-        self.btn_search_anchors = QPushButton('search anchors automatically')
+        self.btn_search_anchors = QPushButton('Search anchors automatically')
         self.btn_deskew = QPushButton('deskew screen')
         self.btn_save_deskewed_screen = QPushButton('save deskewed screen')
-        self.dk_deskew.addWidget(self.label_deskew_dim, row=0, col=0)
-        self.dk_deskew.addWidget(self.edit_deskew_dim, row=0, col=1)
+        self.label_scale_dim = QLabel("Scale screen size to (w,h):")
+        self.edit_scale_dim = QLineEdit()
+        self.edit_scale_dim.setText(self.DEF_SCALE_DIM)
+        self.btn_scale = QPushButton('scale screen')
+        self.btn_save_scaled_screen = QPushButton('save scaled screen')
+        # deskew tab calibration
+        self.dk_deskew.addWidget(self.label_deskew_dim, row=0, col=0,rowspan=1, colspan=1)
+        self.dk_deskew.addWidget(self.edit_deskew_dim, row=0, col=1, rowspan=1, colspan=1)
         self.dk_deskew.addWidget(self.label_deskew_top_left, row=1, col=0)
         self.dk_deskew.addWidget(self.edit_deskew_top_left, row=1, col=1)
         self.dk_deskew.addWidget(self.label_deskew_top_right, row=1, col=2)
@@ -138,10 +151,16 @@ class CalibrationView(QMainWindow):
         self.dk_deskew.addWidget(self.btn_search_anchors, row=3, col=0)
         self.dk_deskew.addWidget(self.btn_deskew, row=3, col=1)
         self.dk_deskew.addWidget(self.btn_save_deskewed_screen, row=3, col=2)
+        self.dk_deskew.addWidget(self.label_scale_dim, row=4, col=0)
+        self.dk_deskew.addWidget(self.edit_scale_dim, row=4, col=1)
+        self.dk_deskew.addWidget(self.btn_scale, row=4, col=2)
+        self.dk_deskew.addWidget(self.btn_save_scaled_screen, row=4, col=3)
 
         self.btn_save_deskewed_screen.clicked.connect(self.on_btn_save_deskewed_screen)
+        self.btn_save_scaled_screen.clicked.connect(self.on_btn_save_scaled_screen)
         self.btn_search_anchors.clicked.connect(self.on_btn_search_anchors)
         self.btn_deskew.clicked.connect(self.on_btn_deskew)
+        self.btn_scale.clicked.connect(self.on_btn_scale)
 
         # noise removal/image blurring
         self.label_image_blurring = QLabel("Denoise type:")
@@ -149,13 +168,14 @@ class CalibrationView(QMainWindow):
         for blurring_type in self.blurring_types:
             self.cb_image_blurring.addItem(blurring_type)
         self.cb_image_blurring.currentIndexChanged.connect(self.on_cb_image_blurring_type_change)
-        self.btn_image_blurring = QPushButton('apply')
+        self.btn_denoise_screen = QPushButton('denoise screen')
         self.btn_save_denoised_screen = QPushButton('save denoised screen')
         self.btn_save_denoised_screen.clicked.connect(self.on_btn_save_denoised_screen)
-        self.btn_image_blurring.clicked.connect(self.on_btn_image_blurring)
+        self.btn_denoise_screen.clicked.connect(self.on_btn_denoise_screen)
+        # denoise tab layout
         self.dk_denoise.addWidget(self.label_image_blurring, row=0, col=0)
         self.dk_denoise.addWidget(self.cb_image_blurring, row=0, col=1)
-        self.dk_denoise.addWidget(self.btn_image_blurring, row=0, col=2)
+        self.dk_denoise.addWidget(self.btn_denoise_screen, row=0, col=2)
         self.dk_denoise.addWidget(self.btn_save_denoised_screen, row=0, col=3)
 
         # color calibration
@@ -167,7 +187,7 @@ class CalibrationView(QMainWindow):
         self.btn_color_calibration_search = QPushButton('search template')
         # self.btn_color_calibration_search.setEnabled(True)
         self.btn_color_calibration_search.clicked.connect(self.on_btn_color_calibration_search)
-        self.btn_color_calibration_search_all = QPushButton('search all templates')
+        self.btn_color_calibration_search_all = QPushButton('search all temps')
         #self.btn_color_calibration_search_all.setEnabled(True)
         self.label_color_space_threshold = QLabel("color space threshold:")
         self.label_rgb_diff_threshold = QLabel("RGB difference threshold:")
@@ -179,7 +199,8 @@ class CalibrationView(QMainWindow):
         # self.btn_default_threshold.setEnabled(True)
         self.btn_default_threshold.clicked.connect(self.on_btn_default_threshold)
         self.btn_color_calibration_search_all.clicked.connect(self.on_btn_color_calibration_search_all)
-        self.dk_color.addWidget(self.label_color_calibration, row=0, col=0)
+        # color calib. layout
+        # self.dk_color.addWidget(self.label_color_calibration, row=0, col=0)
         self.dk_color.addWidget(self.cb_color_calibration_templates, row=0, col=1)
         self.dk_color.addWidget(self.btn_color_calibration_search, row=0, col=2)
         self.dk_color.addWidget(self.btn_color_calibration_search_all, row=0, col=3)
@@ -189,11 +210,10 @@ class CalibrationView(QMainWindow):
         self.dk_color.addWidget(self.edit_rgb_diff_threshold, row=1, col=3)
         self.dk_color.addWidget(self.btn_default_threshold, row=2, col=1)
 
-        # general
+        # general tab
         self.label_video = QLabel("Video:")
         self.cb_video = QComboBox()
         self.cb_video.currentIndexChanged.connect(self.on_cb_video_change)
-
 
         self.label_page = QLabel("Page:")
         self.cb_page = QComboBox()
@@ -208,6 +228,11 @@ class CalibrationView(QMainWindow):
         self.cb_template.currentIndexChanged.connect(self.on_cb_template_change)
         self.template_rgb_avg(self.cb_template.currentText())
 
+        self.label_template_search_method = QLabel("Temp. search method:")
+        self.cb_template_search_methods = QComboBox()
+        for template in self.TEMPLATE_MATCH_METHODS:
+            self.cb_template_search_methods.addItem(template)
+        self.cb_template_search_methods.setCurrentText(self.DEF_TEMPLATE_SEARCH_METHOD)
         self.btn_save_dockstn = QPushButton('Save dock state')
         self.btn_restore_dock = QPushButton('Restore dock state')
         self.btn_restore_dock.setEnabled(False)
@@ -234,7 +259,7 @@ class CalibrationView(QMainWindow):
         self.btn_start_camera = QPushButton('Start camera')
         self.btn_stop_camera = QPushButton('Stop camera')
         self.btn_search = QPushButton('Search template')
-        self.btn_search_all = QPushButton('Search all templates')
+        self.btn_search_all = QPushButton('Search all temps')
         self.cb_video_capture.currentIndexChanged.connect(self.on_video_capture_change)
         self.btn_start_video.clicked.connect(self.on_btn_start_video)
         self.btn_stop_video.clicked.connect(self.on_btn_stop_video)
@@ -247,9 +272,11 @@ class CalibrationView(QMainWindow):
         self.btn_save_roi = QPushButton('Save ROI')
         self.btn_save_roi.clicked.connect(self.on_btn_save_roi)
 
-        self.cb_visual = QCheckBox('Visual', self)
-        self.cb_export = QCheckBox('Export', self)
+        self.label_template_search_region = QLabel("Search temp. in:")
+        self.edit_template_search_region = QLineEdit()
+        self.edit_template_search_region.setText(self.DEF_TEMPLATE_SEARCH_REGION)
 
+        # general tab layout
         self.dk_control.addWidget(self.label_page, row=0, col=0)
         self.dk_control.addWidget(self.cb_page, row=0, col=1)
         self.dk_control.addWidget(self.btn_load_pages, row=0, col=2)
@@ -258,31 +285,36 @@ class CalibrationView(QMainWindow):
         self.dk_control.addWidget(self.cb_template, row=1, col=1)
         self.dk_control.addWidget(self.btn_load_templates, row=1, col=2)
 
-        self.dk_control.addWidget(self.btn_search, row=2, col=0)
-        self.dk_control.addWidget(self.btn_search_all, row=2, col=1)
-        self.dk_control.addWidget(self.btn_ocr_roi, row=2, col=2)
-        self.dk_control.addWidget(self.btn_save_roi, row=2, col=3)
 
-        self.dk_control.addWidget(self.cb_visual, row=3, col=0)
-        self.dk_control.addWidget(self.cb_export, row=3, col=1)
-        self.dk_control.addWidget(self.btn_save_dockstn, row=3, col=2)
-        self.dk_control.addWidget(self.btn_restore_dock, row=3, col=3)
+        self.dk_control.addWidget(self.label_template_search_method, row=2, col=0)
+        self.dk_control.addWidget(self.cb_template_search_methods, row=2, col=1)
 
-        self.dk_control.addWidget(self.label_video, row=4, col=0)
-        self.dk_control.addWidget(self.cb_video, row=4, col=1)
-        self.dk_control.addWidget(self.btn_load_videos, row=4, col=2)
-        self.dk_control.addWidget(self.btn_start_video, row=4, col=3)
-        self.dk_control.addWidget(self.btn_stop_video, row=4, col=4)
+        self.dk_control.addWidget(self.btn_search, row=2, col=2)
+        self.dk_control.addWidget(self.btn_search_all, row=2, col=3)
+        self.dk_control.addWidget(self.btn_ocr_roi, row=3, col=2)
+        self.dk_control.addWidget(self.btn_save_roi, row=3, col=3)
 
-        self.dk_control.addWidget(self.label_video_capture, row=5, col=0)
-        self.dk_control.addWidget(self.cb_video_capture, row=5, col=1)
-        self.dk_control.addWidget(self.btn_start_camera, row=5, col=2)
-        self.dk_control.addWidget(self.btn_stop_camera, row=5, col=3)
+        self.dk_control.addWidget(self.label_template_search_region, row=4, col=0)
+        self.dk_control.addWidget(self.edit_template_search_region, row=4, col=1)
+        self.dk_control.addWidget(self.btn_save_dockstn, row=4, col=2)
+        self.dk_control.addWidget(self.btn_restore_dock, row=4, col=3)
+
+        self.dk_control.addWidget(self.label_video, row=5, col=0)
+        self.dk_control.addWidget(self.cb_video, row=5, col=1)
+        self.dk_control.addWidget(self.btn_load_videos, row=5, col=2)
+        
+        self.dk_control.addWidget(self.btn_start_video, row=6, col=2)
+        self.dk_control.addWidget(self.btn_stop_video, row=6, col=3)
+
+        self.dk_control.addWidget(self.label_video_capture, row=7, col=0)
+        self.dk_control.addWidget(self.cb_video_capture, row=7, col=1)
+        self.dk_control.addWidget(self.btn_start_camera, row=7, col=2)
+        self.dk_control.addWidget(self.btn_stop_camera, row=7, col=3)
 
         self.show()
 
     def on_btn_search(self):
-        visualize = self.cb_visual.isChecked()
+        # visualize = self.cb_visual.isChecked()
         self.template_matching(self.cb_template.currentText())
 
     def on_btn_start_video(self):
@@ -339,7 +371,7 @@ class CalibrationView(QMainWindow):
 
     def sim(self, calculate=True):
         self.template_avg()
-        visualize = self.cb_visual.isChecked()
+        # visualize = self.cb_visual.isChecked()
         # self.template_matching(self.cb_template.currentText())
         cap = cv2.VideoCapture(self.cb_video.currentText())
         if (cap.isOpened() == False):
@@ -415,7 +447,7 @@ class CalibrationView(QMainWindow):
         cv2.destroyAllWindows()
 
     def run_all(self):
-        visualize = self.cb_visual.isChecked()
+        # visualize = self.cb_visual.isChecked()
         for template in self.templates:
             self.template_matching( template)
 
@@ -513,7 +545,7 @@ class CalibrationView(QMainWindow):
                int(self.rect_roi.pos()[1] + self.rect_roi.size()[1]))
         region = im.crop(dim)
 
-        name = ntpath.basename(self.cb_page.currentText()).strip(".png")
+        name = ntpath.basename(self.cb_page.currentText()).rstrip(".png")
         name = "{}_{}_{}_{}_{}.png".format(name,
                                                 int(self.rect_roi.pos()[0]), int(self.rect_roi.pos()[1]),
                                                 int(self.rect_roi.pos()[0] + self.rect_roi.size()[0]),
@@ -551,8 +583,26 @@ class CalibrationView(QMainWindow):
     def on_cb_image_blurring_type_change(self, i):
         pass
 
-    def on_btn_image_blurring(self):
-        pass
+    def on_btn_denoise_screen(self):
+        blurring_type = self.cb_image_blurring.currentIndex()
+        if blurring_type == 0:
+            self.denoised_frame = cv2.blur(self.frame, (3, 3))
+        elif blurring_type == 1:
+            self.denoised_frame = cv2.blur(self.frame, (5, 5))
+        elif blurring_type == 2:
+            self.denoised_frame = cv2.GaussianBlur(self.frame, (3, 3))
+        elif blurring_type == 3:
+            self.denoised_frame = cv2.GaussianBlur(self.frame, (5, 5))
+        elif blurring_type == 4:
+            self.denoised_frame = cv2.medianBlur(self.frame, 3)
+        elif blurring_type == 5:
+            self.denoised_frame = cv2.medianBlur(self.frame, 5)
+        elif blurring_type == 6:
+            self.denoised_frame = cv2.bilateralFilter(self.frame, 9, 75, 75)
+        # elif blurring_type == 7:
+        #     self.denoised_frame = cv2.bilateralFilter(self.frame, 9, 100, 100)
+        self.image_item_page.setImage(cv2.cvtColor(self.denoised_frame, cv2.COLOR_BGR2RGB))
+        self.frame = self.denoised_frame
 
     def on_btn_color_calibration_search(self):
         self.template_matching(self.cb_color_calibration_templates.currentText())
@@ -568,7 +618,7 @@ class CalibrationView(QMainWindow):
         pass
 
     def on_btn_deskew(self):
-        img = self.frame  # cv2.imread('sudokusmall.png')
+        img = self.frame
         rows, cols, ch = img.shape
         top_left = list(map(int, self.edit_deskew_top_left.text().split(',')))
         top_right = list(map(int, self.edit_deskew_top_right.text().split(',')))
@@ -581,16 +631,37 @@ class CalibrationView(QMainWindow):
         self.deskewed_frame = cv2.warpPerspective(img, M, (width, height))
         self.image_item_page.setImage(cv2.cvtColor(self.deskewed_frame, cv2.COLOR_BGR2RGB))
         self.frame = self.deskewed_frame
+        
+    def on_btn_scale(self):
+        img = self.frame
+        (width, height) = list(map(int, self.edit_scale_dim.text().split(',')))
+
+        self.scaled_frame = cv2.resize(img,(width, height))
+        self.image_item_page.setImage(cv2.cvtColor(self.scaled_frame, cv2.COLOR_BGR2RGB))
+        self.frame = self.scaled_frame
+
+    def on_btn_save_scaled_screen(self):
+        basename = ntpath.basename(self.cb_page.currentText()).rstrip(".png")
+        scale_dim = list(map(int, self.edit_scale_dim.text().split(',')))
+        name = "{}_scaled_{}x{}.png".format(basename, scale_dim[0], scale_dim[1])
+        cv2.imwrite(name, self.scaled_frame)
+        self.console.write(f"scaled screen saved as: {name}  \n")
 
     def on_btn_save_denoised_screen(self):
-        pass
+        denoise_type = self.cb_image_blurring.currentText()
+        basename = ntpath.basename(self.cb_page.currentText()).rstrip(".png")
+        name = "{}_denoised_{}.png".format(basename, denoise_type)
+        cv2.imwrite(name, self.denoised_frame)
+        self.console.write(f"denoised screen saved as: {name}  \n")
 
     def on_btn_save_deskewed_screen(self):
         width, height =  list(map(int, self.edit_deskew_dim.text().split(',')))
-        basename = ntpath.basename(self.cb_page.currentText()).strip(".png")
-        name = "{}_{}x{}.png".format(basename, width, height)
+        print(f"{self.cb_page.currentText()}")
+        print(f"{self.cb_page.currentText().rstrip('.png')}")
+        basename = ntpath.basename(self.cb_page.currentText()).rstrip(".png")
+        name = "{}_deskewed_{}x{}.png".format(basename, width, height)
         cv2.imwrite(name, self.deskewed_frame)
-        self.console.write(f"deskewed screen saved ase: {name}  \n")
+        self.console.write(f"deskewed screen saved as: {name}  \n")
 
     def multi_scale_template_matching(self, template_file=None, template_edge=None, frame=None, debug=True, paint=True):
         if template_edge is None:
@@ -598,7 +669,8 @@ class CalibrationView(QMainWindow):
             template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
             template_edge = cv2.Canny(template_gray, 50, 200)
         (tH, tW) = template_edge.shape[:2]
-        if paint and self.cb_visual.isChecked():
+        visual = True
+        if paint and visual:
             self.image_item_template.setImage(template_edge)
         # load the image, convert it to grayscale, and initialize the
         # bookkeeping variable to keep track of the matched region
@@ -630,7 +702,7 @@ class CalibrationView(QMainWindow):
             (_, maxVal, _, maxLoc) = cv2.minMaxLoc(result)
 
             # check to see if the iteration should be visualized
-            if paint and self.cb_visual.isChecked() is True:
+            if paint and visual is True:
                 # draw a bounding box around the detected region
                 clone = np.dstack([edged, edged, edged])
                 cv2.rectangle(clone, (maxLoc[0], maxLoc[1]),
@@ -675,7 +747,7 @@ class CalibrationView(QMainWindow):
             cv2.rectangle(image, (startX, startY), (endX, endY), (0, 0, 255), 10)
 
             self.image_item_page.setImage(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-            if self.cb_visual.isChecked():
+            if visual:
                 template = cv2.imread(template_file)
                 self.image_item_template.setImage(cv2.cvtColor(template, cv2.COLOR_BGR2RGB))
             QtGui.QGuiApplication.processEvents()
@@ -722,65 +794,90 @@ class CalibrationView(QMainWindow):
         w, h = template.shape[::-1]
 
         # All the 6 methods for comparison in a list
-        methods = ['cv2.TM_CCOEFF', 'cv2.TM_CCOEFF_NORMED', 'cv2.TM_CCORR',
-                   'cv2.TM_CCORR_NORMED', 'cv2.TM_SQDIFF', 'cv2.TM_SQDIFF_NORMED']
+        # methods = ['cv2.TM_CCOEFF', 'cv2.TM_CCOEFF_NORMED', 'cv2.TM_CCORR',
+        #            'cv2.TM_CCORR_NORMED', 'cv2.TM_SQDIFF', 'cv2.TM_SQDIFF_NORMED']
+        search_region= list(map(int, self.edit_template_search_region.text().split(',')))
+        # swap row and col
+        search_region[0],search_region[1],search_region[2],search_region[3], = search_region[1],search_region[0],search_region[3],search_region[2]
+        if search_region[2] > img.shape[0]:
+            self.console.output(f"template search region: {search_region} > image size: {img.shape}\n")
+            search_region[2] = img.shape[0]
+        if search_region[3] > img.shape[1]:
+            self.console.output(f"template search region: {search_region} > image size: {img.shape}\n")
+            search_region[3] = img.shape[1]
+        method = eval(self.cb_template_search_methods.currentText())
 
-        for meth in ['cv2.TM_SQDIFF_NORMED']: # methods:
-            method = eval(meth)
+        # Apply template Matching
+        res = cv2.matchTemplate(img[search_region[0]:search_region[2],search_region[1]:search_region[3]], template, method)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
 
-            # Apply template Matching
-            res = cv2.matchTemplate(img, template, method)
-            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-
-            # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
-            if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
-                top_left = min_loc
-                val = min_val
-                if  max_val == min_val:
-                    result = 0.0
-                else:
-                    result = 1.0 - val / (max_val) # - min_val)
+        # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
+        if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
+            top_left = min_loc
+            val = min_val
+            if  max_val == min_val:
+                result = 0.0
             else:
-                top_left = max_loc
-                val = max_val
-                if max_val == min_val:
-                    result = 0.0
-                else:
-                    result = val / (max_val) # - min_val)
-            bottom_right = (top_left[0] + w, top_left[1] + h)
-            (startX, startY) = top_left
-            (endX, endY) = bottom_right
-
-            b = int(np.average(self.frame[startY:endY, startX:endX, 0]))
-            g = int(np.average(self.frame[startY:endY, startX:endX, 1]))
-            r = int(np.average(self.frame[startY:endY, startX:endX, 2]))
-
-            # r = np.average(self.frame[startX:endX, startY:endY, 0])
-            # g = np.average(self.frame[startX:endX, startY:endY, 1])
-            # b = np.average(self.frame[startX:endX, startY:endY, 2])
-
-            self.console.write(f"color avg RGB: {r}, {g}, {b}\n")
-            print(f"color avg RGB: {r}, {g}, {b}\n")
-            delta = compare_rgb((r, g, b),self.template_rgb)
-
-            self.console.write(f"result:{result}, distance(color space, r,g,b):{delta[0]:.2f},{delta[1]},{delta[2]},{delta[3]}, loc:{top_left, bottom_right}")
-            print(f"result:{result}, distance(color space, r,g,b):{delta}")
-            if result < threshold:
-               print(f"{meth}: no template found. threshold {result} <  {threshold}")
-            elif delta[0] > COLOR_DISTANCE_THRESHOLD:
-                print(f"{meth}: no template found. delta_e {delta[0]:.2f} > {COLOR_DISTANCE_THRESHOLD}")
-            elif sum(delta[1:]) > RGB_DIFFERENCE_THRESHOLD:
-                print(f"{meth}: no template found. delta_rgb {delta[1:]} > {RGB_DIFFERENCE_THRESHOLD}")
+                result = 1.0 - val / (max_val) # - min_val)
+        else:
+            top_left = max_loc
+            val = max_val
+            if max_val == min_val:
+                result = 0.0
+            elif method in [cv2.TM_CCOEFF, cv2.TM_CCOEFF_NORMED, cv2.TM_CCORR, cv2.TM_CCORR]:
+                result = val / (max_val - min_val)
             else:
-                # check to see if the iteration should be visualized
-                # cv2.waitKey(0)
-                if paint is True:
-                    # draw a bounding box around the detected result and display the image
-                    frame = self.frame.copy()
-                    cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 0, 255), 5)
-                    print(f"{meth}: found template at {top_left}, {bottom_right}, val: {val}({min_val, max_val}), result: {result}")
-                    self.image_item_page.setImage(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                    QtGui.QGuiApplication.processEvents()
+                result = val
+        top_left = (top_left[0] + search_region[1], top_left[1] + search_region[0])
+        bottom_right = (top_left[0] + w, top_left[1] + h)
+        (startX, startY) = top_left
+        (endX, endY) = bottom_right
+
+        b = int(np.average(self.frame[startY:endY, startX:endX, 0]))
+        g = int(np.average(self.frame[startY:endY, startX:endX, 1]))
+        r = int(np.average(self.frame[startY:endY, startX:endX, 2]))
+
+        # r = np.average(self.frame[startX:endX, startY:endY, 0])
+        # g = np.average(self.frame[startX:endX, startY:endY, 1])
+        # b = np.average(self.frame[startX:endX, startY:endY, 2])
+
+        self.console.write(f"color avg RGB: {r}, {g}, {b}\n")
+        print(f"color avg RGB: {r}, {g}, {b}")
+        delta = compare_rgb((r, g, b),self.template_rgb)
+
+        # self.console.write(
+        #     f"{meth}: detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
+        # print(
+        #     f"{meth}: detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
+
+        self.console.write(f"color diff(space:{delta[0]:.2f}, (r,g,b):({delta[1]},{delta[2]},{delta[3]}) at loc:{top_left}, {bottom_right}\n")
+        if paint is True:
+            frame = self.frame.copy()
+        if result < threshold:
+           self.console.write(f"!!!no template found. result {result:.2f} < threshold  {threshold}\n")
+           print(f"!!!no template found. result {result:.2f} < threshold  {threshold}")
+           cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 128), 5)
+        elif delta[0] > COLOR_DISTANCE_THRESHOLD:
+            self.console.write(f"!!!no template found. color space diff {delta[0]:.2f} > {COLOR_DISTANCE_THRESHOLD}\n")
+            print(f"!!!no template found. color space diff {delta[0]:.2f} > {COLOR_DISTANCE_THRESHOLD}")
+            cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 128), 5)
+        elif sum(delta[1:]) > RGB_DIFFERENCE_THRESHOLD:
+            self.console.write(f"!!!no template found. color rgb diff {delta[1:]} > {RGB_DIFFERENCE_THRESHOLD}\n")
+            print(f"!!!no template found. color rgb diff {delta[1:]} > {RGB_DIFFERENCE_THRESHOLD}")
+            cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 128), 5)
+        else:
+            # check to see if the iteration should be visualized
+            # cv2.waitKey(0)
+            if paint is True:
+                # draw a bounding box around the detected result and display the image
+                cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 0), 5)
+                self.console.write(f"found template result: {result:.2f} at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
+                print(f"found template result: {result:.2f} at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f})")
+
+
+        if paint is True:
+            self.image_item_page.setImage(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            QtGui.QGuiApplication.processEvents()
 
 
 ## Start Qt event loop unless running in interactive mode or using pyside.

@@ -73,16 +73,16 @@ class CalibrationView(QMainWindow):
         ## fill the entire dock self.area and obey the limits of their internal widgets.
         self.dk_page = Dock("page", size=(1280, 720))  ## give this dock the minimum possible size
         self.dk_template = Dock("template", size=(200, 280))
-        self.dk_control = Dock("general", size=(800, 280))
-        self.dk_info = Dock("info", size=(2400, 280))
+        self.dk_control = Dock("general", size=(500, 280))
+        self.dk_info = Dock("info", size=(500, 280))
         # color
-        self.dk_color = Dock("color", size=(240, 280))
+        self.dk_color = Dock("color", size=(500, 280))
 
         # deskew
-        self.dk_deskew = Dock("deskew", size=(240, 280))
+        self.dk_deskew = Dock("deskew", size=(500, 280))
 
         # noise
-        self.dk_denoise = Dock("denoise", size=(240, 280))
+        self.dk_denoise = Dock("denoise", size=(500, 280))
 
         self.area.addDock(self.dk_page, 'right')
         self.area.addDock(self.dk_template, 'bottom', self.dk_page)
@@ -854,16 +854,16 @@ class CalibrationView(QMainWindow):
         if paint is True:
             frame = self.frame.copy()
         if result < threshold:
-           self.console.write(f"!!!no template found. result {result:.2f} < threshold  {threshold}\n")
-           print(f"!!!no template found. result {result:.2f} < threshold  {threshold}")
+           self.console.write(f"no template found!!!. result {result:.2f} < threshold  {threshold}\n")
+           print(f"no template found!!!. result {result:.2f} < threshold  {threshold}")
            cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 128), 5)
         elif delta[0] > COLOR_DISTANCE_THRESHOLD:
-            self.console.write(f"!!!no template found. color space diff {delta[0]:.2f} > {COLOR_DISTANCE_THRESHOLD}\n")
-            print(f"!!!no template found. color space diff {delta[0]:.2f} > {COLOR_DISTANCE_THRESHOLD}")
+            self.console.write(f"template found but color doesnt match???. color space diff {delta[0]:.2f} > {COLOR_DISTANCE_THRESHOLD}\n")
+            print(f"template found but color doesnt match???. color space diff {delta[0]:.2f} > {COLOR_DISTANCE_THRESHOLD}")
             cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 128), 5)
         elif sum(delta[1:]) > RGB_DIFFERENCE_THRESHOLD:
-            self.console.write(f"!!!no template found. color rgb diff {delta[1:]} > {RGB_DIFFERENCE_THRESHOLD}\n")
-            print(f"!!!no template found. color rgb diff {delta[1:]} > {RGB_DIFFERENCE_THRESHOLD}")
+            self.console.write(f"template found but color doesnt match???. color rgb diff {delta[1:]} > {RGB_DIFFERENCE_THRESHOLD}\n")
+            print(f"template found but color doesnt match???. color rgb diff {delta[1:]} > {RGB_DIFFERENCE_THRESHOLD}")
             cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 128), 5)
         else:
             # check to see if the iteration should be visualized

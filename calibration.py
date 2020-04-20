@@ -19,7 +19,7 @@ import json
 
 
 import time
-from image import compare_rgb
+from image import compare_rgb, search_corners
 VERSION = "0.0.1"
 
 class MyImageItem(pg.ImageItem):
@@ -47,7 +47,7 @@ class CalibrationView(QMainWindow):
         self.DEF_RGB_DIFFERENCE_THRESHOLD = "30"
         self.DEF_SCREEN_DIM = "1920,1080"
         self.DEF_SCALE_DIM = "1280,720"
-        self.DEF_TEMPLATE_SEARCH_REGION = "0, 0, 1280,720"
+        self.DEF_TEMPLATE_SEARCH_REGION = "0, 0, -1,-1"
         self.TEMPLATE_MATCH_METHODS = ['cv2.TM_CCOEFF', 'cv2.TM_CCOEFF_NORMED',
                                        'cv2.TM_CCORR', 'cv2.TM_CCORR_NORMED',
                                        'cv2.TM_SQDIFF', 'cv2.TM_SQDIFF_NORMED']
@@ -66,6 +66,8 @@ class CalibrationView(QMainWindow):
         self.resize(1024, 900)
         self.setWindowTitle(title)
         self.start_streaming = False
+        self.pause_video = False
+        self.cap = None
         self.deskewed_frame = None
 
         ## Create docks, place them into the window one at a time.
@@ -253,13 +255,17 @@ class CalibrationView(QMainWindow):
         self.cb_video_capture.addItem("udp://127.0.0.1:12345")
         self.cb_video_capture.addItem("udp://192.168.8.19:12345")
         self.cb_video_capture.addItem("udp://192.168.8.3:12345")
-        self.btn_start_video = QPushButton('Start video')
+        self.btn_start_video = QPushButton('Start/Pause video')
         self.btn_stop_video = QPushButton('Stop video')
 
         self.btn_start_camera = QPushButton('Start camera')
         self.btn_stop_camera = QPushButton('Stop camera')
         self.btn_search = QPushButton('Search template')
         self.btn_search_all = QPushButton('Search all temps')
+
+        self.frame_slider = Slider(0, 100 - 1, Qt.Horizontal)
+        self.frame_slider.slider.valueChanged.connect(self.frame_update)
+
         self.cb_video_capture.currentIndexChanged.connect(self.on_video_capture_change)
         self.btn_start_video.clicked.connect(self.on_btn_start_video)
         self.btn_stop_video.clicked.connect(self.on_btn_stop_video)
@@ -291,6 +297,7 @@ class CalibrationView(QMainWindow):
 
         self.dk_control.addWidget(self.btn_search, row=2, col=2)
         self.dk_control.addWidget(self.btn_search_all, row=2, col=3)
+
         self.dk_control.addWidget(self.btn_ocr_roi, row=3, col=2)
         self.dk_control.addWidget(self.btn_save_roi, row=3, col=3)
 
@@ -302,7 +309,8 @@ class CalibrationView(QMainWindow):
         self.dk_control.addWidget(self.label_video, row=5, col=0)
         self.dk_control.addWidget(self.cb_video, row=5, col=1)
         self.dk_control.addWidget(self.btn_load_videos, row=5, col=2)
-        
+
+        self.dk_control.addWidget(self.frame_slider, row=6, col=0, colspan=2)
         self.dk_control.addWidget(self.btn_start_video, row=6, col=2)
         self.dk_control.addWidget(self.btn_stop_video, row=6, col=3)
 
@@ -310,6 +318,10 @@ class CalibrationView(QMainWindow):
         self.dk_control.addWidget(self.cb_video_capture, row=7, col=1)
         self.dk_control.addWidget(self.btn_start_camera, row=7, col=2)
         self.dk_control.addWidget(self.btn_stop_camera, row=7, col=3)
+
+        # self.current_frame  = 0
+        # self.frame_slider.position(self.current_frame)
+        # self.frame_update()
 
         self.show()
 
@@ -328,6 +340,7 @@ class CalibrationView(QMainWindow):
 
     def on_btn_stop_video(self):
         self.start_streaming = False
+        self.pause_video = False
 
     def on_btn_start_camera(self):
         self.start_streaming = False
@@ -411,20 +424,36 @@ class CalibrationView(QMainWindow):
 
     def play_video(self):
         if self.start_streaming is True:
-            return
-        self.start_streaming = True
-        cap = cv2.VideoCapture(self.cb_video.currentText())
-        if (cap.isOpened() == False):
-            print("Error opening video stream or file")
+            if self.pause_video is False:
+                self.pause_video = True
+                print(f"pause video")
+                return
+            else:
+                # resume video
+                self.pause_video = False
+                print(f"resume video")
+        else:
+            self.start_streaming = True
+            self.cap = cv2.VideoCapture(self.cb_video.currentText())
+            if (self.cap.isOpened() == False):
+                print("Error opening video stream or file")
+            self.total_frames = self.cap.get(7)
+            print(f"total frames: {self.total_frames}")
+            self.current_frame = 0
+            self.frame_slider.set_max(self.total_frames)
+            self.frame_slider.position(self.current_frame)
+            # self.frame_update()
 
         # Read until video is completed
         frames = 0
         start = time.time()
-        while cap.isOpened() and self.start_streaming is True:
+        while self.cap.isOpened() and self.start_streaming is True and self.pause_video is False:
             # Capture frame-by-frame
-            ret, self.frame = cap.read()
+            ret, self.frame = self.cap.read()
             if ret == True:
                 frames += 1
+                self.current_frame += 1
+                self.frame_slider.position(self.current_frame)
                 self.image_item_page.setImage(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB))
 
                 # Press Q on keyboard to exit
@@ -441,10 +470,21 @@ class CalibrationView(QMainWindow):
 
 
         print(f"{frames / (time.time() - start)} fp/s")
-        # When everything done, release the video capture object
-        cap.release()
-        # Closes all the frames
-        cv2.destroyAllWindows()
+        if self.pause_video is False:
+            # When everything done, release the video capture object
+            self.cap.release()
+            # Closes all the frames
+            cv2.destroyAllWindows()
+
+    ''' refresh frame window,
+     called when new frame needs to be painted,
+     e.g. triggers by slider widget  '''
+
+    def frame_update(self):
+        a = self.frame_slider.x
+        # print ("frame: {}".format(a))
+        self.new_frame = int(a)
+        # jump to current frame
 
     def run_all(self):
         # visualize = self.cb_visual.isChecked()
@@ -454,12 +494,22 @@ class CalibrationView(QMainWindow):
     def on_change_rect_roi(self):
         # pic = Image.open(self.cb_page.currentText())
         # pix = np.array(pic.getdata()).reshape(pic.size[1], pic.size[0], 4)
-        dim = (int(self.rect_roi.pos()[0]), int(self.rect_roi.pos()[1]),
+        dim = [int(self.rect_roi.pos()[0]), int(self.rect_roi.pos()[1]),
                int(self.rect_roi.pos()[0] + self.rect_roi.size()[0]),
-               int(self.rect_roi.pos()[1] + self.rect_roi.size()[1]))
+               int(self.rect_roi.pos()[1] + self.rect_roi.size()[1])]
         # b = np.average(pix[dim[1]:dim[3],dim[0]:dim[2], 0])
         # g = np.average(pix[dim[1]:dim[3],dim[0]:dim[2], 1])
         # r = np.average(pix[dim[1]:dim[3],dim[0]:dim[2], 2])
+        # print(f"on_change_rect_roi dim: {dim}")
+        if dim[0] < 0:
+            dim[0] = 0
+        if dim[1] < 0:
+            dim[1] = 0
+        if dim[2] > self.frame.shape[1]:
+            dim[2] = self.frame.shape[1]
+        if dim[3] > self.frame.shape[0]:
+            dim[3] = self.frame.shape[0]
+        # print(f"on_change_rect_roi dim: {dim}")
         b = int(np.average(self.frame[dim[1]:dim[3], dim[0]:dim[2], 0]))
         g = int(np.average(self.frame[dim[1]:dim[3], dim[0]:dim[2], 1]))
         r = int(np.average(self.frame[dim[1]:dim[3], dim[0]:dim[2], 2]))
@@ -615,7 +665,30 @@ class CalibrationView(QMainWindow):
         self.edit_color_space_threshold.setText(self.DEF_COLOR_DISTANCE_THRESHOLD)
 
     def on_btn_search_anchors(self):
-        pass
+
+        # load the image and compute the ratio of the old height
+        # to the new height, clone it, and resize it
+        tl, tr, bl, br, width, height = search_corners(self.frame)
+        image = self.frame.copy() # cv2.imread('cards/red8.jpg')
+        if tl is not None:
+            self.console.write(f"search anchors succeeds")
+            # cv2.drawContours(image, [[tl],[tr],[bl],[br]], -1, (0, 255, 0), 2)
+            cv2.line(image, tuple(tl), tuple(tr), (0, 255, 0), 2)
+            cv2.line(image, tuple(tr), tuple(br), (0, 255, 0), 2)
+            cv2.line(image, tuple(br), tuple(bl), (0, 255, 0), 2)
+            cv2.line(image, tuple(bl), tuple(tl), (0, 255, 0), 2)
+            self.image_item_page.setImage(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+
+            self.edit_deskew_top_left.setText(f"{tl[0]}, {tl[1]}")
+            self.edit_deskew_bot_right.setText(f"{br[0]},{br[1]}")
+
+            self.edit_deskew_top_right.setText(f"{tr[0]},{tr[1]}")
+            self.edit_deskew_bot_left.setText(f"{bl[0]},{bl[1]}")
+
+            self.edit_deskew_dim.setText(f"{width},{height}")
+        else:
+            self.console.write(f"search anchors fails")
+
 
     def on_btn_deskew(self):
         img = self.frame
@@ -799,6 +872,15 @@ class CalibrationView(QMainWindow):
         search_region= list(map(int, self.edit_template_search_region.text().split(',')))
         # swap row and col
         search_region[0],search_region[1],search_region[2],search_region[3], = search_region[1],search_region[0],search_region[3],search_region[2]
+        # handle default region
+        if search_region[0] < 0:
+            search_region[0] = 0
+        if search_region[1] < 0:
+            search_region[1] = 0
+        if search_region[2] < 0:
+            search_region[2] = img.shape[0]
+        if search_region[3] < 0:
+            search_region[3] = img.shape[1]
         if search_region[2] > img.shape[0]:
             self.console.output(f"template search region: {search_region} > image size: {img.shape}\n")
             search_region[2] = img.shape[0]
@@ -850,12 +932,12 @@ class CalibrationView(QMainWindow):
         # print(
         #     f"{meth}: detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
 
-        self.console.write(f"color diff(space:{delta[0]:.2f}, (r,g,b):({delta[1]},{delta[2]},{delta[3]}) at loc:{top_left}, {bottom_right}\n")
+        self.console.write(f"color diff(space:{delta[0]:.2f}, (r,g,b):({delta[1:]}) at loc: {top_left+bottom_right}\n")
         if paint is True:
             frame = self.frame.copy()
         if result < threshold:
-           self.console.write(f"no template found!!!. result {result:.2f} < threshold  {threshold}\n")
-           print(f"no template found!!!. result {result:.2f} < threshold  {threshold}")
+           self.console.write(f"no template found!!!. result {result:.2f} < threshold  {threshold} in region: {search_region}\n")
+           print(f"no template found!!!. result {result:.2f} < threshold  {threshold} in region: {search_region}")
            cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 128), 5)
         elif delta[0] > COLOR_DISTANCE_THRESHOLD:
             self.console.write(f"template found but color doesnt match???. color space diff {delta[0]:.2f} > {COLOR_DISTANCE_THRESHOLD}\n")
@@ -871,13 +953,56 @@ class CalibrationView(QMainWindow):
             if paint is True:
                 # draw a bounding box around the detected result and display the image
                 cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 0), 5)
-                self.console.write(f"found template result: {result:.2f} at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
-                print(f"found template result: {result:.2f} at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f})")
+                self.console.write(f"found template result: {result:.2f} at {top_left+bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f} in region: {search_region}\n")
+                print(f"found template result: {result:.2f} at {top_left+bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}) in region: {search_region}")
 
 
         if paint is True:
             self.image_item_page.setImage(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             QtGui.QGuiApplication.processEvents()
+
+
+class Slider(QWidget):
+    def __init__(self, minimum, maximum, orientation=Qt.Horizontal, parent=None):
+        super(Slider, self).__init__(parent=parent)
+
+        self.label = QLabel(self)
+        self.horizontalLayout = QHBoxLayout(self)
+        self.slider = QSlider(self)
+        self.slider.setOrientation(orientation)
+        self.slider.setTickPosition(QSlider.TicksBothSides)
+        self.horizontalLayout.addWidget(self.slider)
+        self.horizontalLayout.addWidget(self.label)
+        self.resize(self.sizeHint())
+
+        self.slider.setTickInterval(maximum)
+        self.slider.setSingleStep(1)
+        self.slider.setMaximum(maximum)
+        self.slider.setMinimum(minimum)
+        self.minimum = minimum
+        self.maximum = maximum
+        self.orientatioin = orientation
+        self.slider.valueChanged.connect(self.set_label_value)
+        self.x = None
+        self.set_label_value(self.slider.value())
+
+    def position(self, pos):
+        self.slider.setSliderPosition(pos)
+
+    def set_max(self, maximum):
+        self.slider.setMaximum(maximum)
+
+    def set_label_value(self, value):
+        if (self.slider.maximum() == self.slider.minimum()):
+            self.x = 0.0
+        else:
+            self.x = self.minimum + (float(value) / (self.slider.maximum() - self.slider.minimum())) * (
+                    self.maximum - self.minimum)
+        self.x = int(self.x)
+        # self.label.setText("frame: {0:.4g}".format(self.x))
+        self.label.setText(f"no.:{value}/{self.x}%")
+        # print ("set_label_value({}, frame x:{}/{}".format(value, self.x))
+
 
 
 ## Start Qt event loop unless running in interactive mode or using pyside.

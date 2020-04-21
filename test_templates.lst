@@ -22,4 +22,16 @@ templates/Roku/detailPageRate.png
 templates/Roku/detailPageRateUnHi.png
 templates/Roku/detailPageTrailer.png
 templates/Roku/detailPageTrailerUnHi.png
+images/color_calibration/blue_short.png
+images/color_calibration/blue_tall.png
+images/color_calibration/cyan_short.png
+images/color_calibration/cyan_tall.png
+images/color_calibration/gray_gradient.png
+images/color_calibration/gray_tall.png
+images/color_calibration/gray_light_tall.png
+images/color_calibration/green_tall.png
+images/color_calibration/magenta_tall.png
+images/color_calibration/purple_short.png
+images/color_calibration/red_short.png
+
 

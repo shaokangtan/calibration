@@ -43,8 +43,8 @@ class CalibrationView(QMainWindow):
         self.videos = []
         self.pages = list(pages)
         self.templates = list(templates)
-        self.DEF_COLOR_DISTANCE_THRESHOLD = "10.0"
-        self.DEF_RGB_DIFFERENCE_THRESHOLD = "30"
+        self.DEF_COLOR_DISTANCE_THRESHOLD = "15.0"
+        self.DEF_RGB_DIFFERENCE_THRESHOLD = "50"
         self.DEF_SCREEN_DIM = "1920,1080"
         self.DEF_SCALE_DIM = "1280,720"
         self.DEF_TEMPLATE_SEARCH_REGION = "0, 0, -1,-1"
@@ -54,12 +54,15 @@ class CalibrationView(QMainWindow):
         self.DEF_TEMPLATE_SEARCH_METHOD = 'cv2.TM_CCORR_NORMED'
 
         self.blurring_types = ["Averaging 3x3", "Averaging 5x5", "Gaussian Filtering 3x3", "Gaussian Filtering 5x5", "Median Filtering 3", "Median Filtering", "Bilateral Filtering"]
-        self.color_templates = ["images/color_calibration/blue_tall.png", "images/color_calibration/cyan_tall.png",
+        self.color_templates = ["images/color_calibration/blue_tall.png", "images/color_calibration/blue_short.png",
+                                "images/color_calibration/cyan_tall.png", "images/color_calibration/cyan_short.png",
                                 "images/color_calibration/green_tall.png", "images/color_calibration/purple_short.png",
-                                "images/color_calibration/yellow_short.png", "images/color_calibration/blue_short.png",
-                                "images/color_calibration/cyan_short.png", "images/color_calibration/gray_gradient.png",
-                                "images/color_calibration/magenta_tall.png", "images/color_calibration/red_short.png",
-                                "images/color_calibration/yellow_tall.png"]
+                                "iges/color_calibration/yellow_tall.png", "images/color_calibration/yellow_short.png",
+                                "images/color_calibration/gray_tall.png", "images/color_calibration/gray_light_tall.png",
+                                "images/color_calibration/gray_gradient.png",
+                                "images/color_calibration/magenta_tall.png",
+                                "images/color_calibration/red_tall.png", "images/color_calibration/red_short.png"
+                                ]
         self.verbose = verbose
         self.area = DockArea()
         self.setCentralWidget(self.area)
@@ -230,11 +233,14 @@ class CalibrationView(QMainWindow):
         self.cb_template.currentIndexChanged.connect(self.on_cb_template_change)
         self.template_rgb_avg(self.cb_template.currentText())
 
-        self.label_template_search_method = QLabel("Temp. search method:")
+        self.label_template_search_method = QLabel("Search method:")
         self.cb_template_search_methods = QComboBox()
         for template in self.TEMPLATE_MATCH_METHODS:
             self.cb_template_search_methods.addItem(template)
         self.cb_template_search_methods.setCurrentText(self.DEF_TEMPLATE_SEARCH_METHOD)
+        self.label_template_search_method_retry = QLabel("Try again:")
+        self.cb_try_diff_temp_search_if_fail = QCheckBox("when temp. search failed")
+
         self.btn_save_dockstn = QPushButton('Save dock state')
         self.btn_restore_dock = QPushButton('Restore dock state')
         self.btn_restore_dock.setEnabled(False)
@@ -298,6 +304,8 @@ class CalibrationView(QMainWindow):
         self.dk_control.addWidget(self.btn_search, row=2, col=2)
         self.dk_control.addWidget(self.btn_search_all, row=2, col=3)
 
+        self.dk_control.addWidget(self.label_template_search_method_retry, row=3, col=0)
+        self.dk_control.addWidget(self.cb_try_diff_temp_search_if_fail, row=3, col=1)
         self.dk_control.addWidget(self.btn_ocr_roi, row=3, col=2)
         self.dk_control.addWidget(self.btn_save_roi, row=3, col=3)
 
@@ -581,10 +589,12 @@ class CalibrationView(QMainWindow):
         # region = im.crop(dim)
 
         region = self.frame[dim[1]:dim[3],dim[0]:dim[2]]
+        start = time.clock()
         text = pytesseract.image_to_string(region)
         # text = pytesseract.image_to_string(self.frame)
-        print(f"ocr roi pos: {dim}, result: {text}")
-        self.console.write(f"ocr roi pos: {dim}, result: {text}")
+        print(f"ocr roi pos: {dim}, result: '{text}'")
+        self.console.write(f"ocr roi pos: {dim}, result: '{text}', spent: "
+                           f"{((time.clock()-start) * 1000):.3f} ms")
 
     def on_btn_save_roi(self):
         print("roi pos: {}".format(self.rect_roi.pos()))
@@ -634,21 +644,24 @@ class CalibrationView(QMainWindow):
         pass
 
     def on_btn_denoise_screen(self):
+        start = time.clock()
         blurring_type = self.cb_image_blurring.currentIndex()
         if blurring_type == 0:
             self.denoised_frame = cv2.blur(self.frame, (3, 3))
         elif blurring_type == 1:
             self.denoised_frame = cv2.blur(self.frame, (5, 5))
         elif blurring_type == 2:
-            self.denoised_frame = cv2.GaussianBlur(self.frame, (3, 3))
+            self.denoised_frame = cv2.GaussianBlur(self.frame, (3, 3), 3)
         elif blurring_type == 3:
-            self.denoised_frame = cv2.GaussianBlur(self.frame, (5, 5))
+            self.denoised_frame = cv2.GaussianBlur(self.frame, (5, 5), 5)
         elif blurring_type == 4:
             self.denoised_frame = cv2.medianBlur(self.frame, 3)
         elif blurring_type == 5:
             self.denoised_frame = cv2.medianBlur(self.frame, 5)
         elif blurring_type == 6:
-            self.denoised_frame = cv2.bilateralFilter(self.frame, 9, 75, 75)
+            self.denoised_frame = cv2.bilateralFilter(self.frame, 9, sigmaColor=75, sigmaSpace=75)
+        self.console.write(f"denoise with '{self.cb_image_blurring.currentText()}' spent: {((time.clock()-start) * 1000):.3f} ms\n")
+
         # elif blurring_type == 7:
         #     self.denoised_frame = cv2.bilateralFilter(self.frame, 9, 100, 100)
         self.image_item_page.setImage(cv2.cvtColor(self.denoised_frame, cv2.COLOR_BGR2RGB))
@@ -889,73 +902,99 @@ class CalibrationView(QMainWindow):
             search_region[3] = img.shape[1]
         method = eval(self.cb_template_search_methods.currentText())
 
-        # Apply template Matching
-        res = cv2.matchTemplate(img[search_region[0]:search_region[2],search_region[1]:search_region[3]], template, method)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-
-        # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
-        if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
-            top_left = min_loc
-            val = min_val
-            if  max_val == min_val:
-                result = 0.0
-            else:
-                result = 1.0 - val / (max_val) # - min_val)
+        if self.cb_try_diff_temp_search_if_fail.isChecked() is True:
+            max_tries = 2
         else:
-            top_left = max_loc
-            val = max_val
-            if max_val == min_val:
-                result = 0.0
-            elif method in [cv2.TM_CCOEFF, cv2.TM_CCOEFF_NORMED, cv2.TM_CCORR, cv2.TM_CCORR]:
-                result = val / (max_val - min_val)
+            max_tries = 1
+        for i in range(max_tries):
+            # Apply template Matching
+            res = cv2.matchTemplate(img[search_region[0]:search_region[2],search_region[1]:search_region[3]], template, method)
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+
+            '''
+            # get all the matches:
+            res2 = np.reshape(res, res.shape[0] * res.shape[1])
+            sort = np.argsort(res2)
+            (y1, x1) = np.unravel_index(sort[0], res.shape)  # best match
+            (y2, x2) = np.unravel_index(sort[1], res.shape)  # second best match
+            '''
+
+
+            # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
+            if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
+                top_left = min_loc
+                val = min_val
+                if  max_val == min_val:
+                    result = 0.0
+                else:
+                    result = 1.0 - val / (max_val) # - min_val)
             else:
-                result = val
-        top_left = (top_left[0] + search_region[1], top_left[1] + search_region[0])
-        bottom_right = (top_left[0] + w, top_left[1] + h)
-        (startX, startY) = top_left
-        (endX, endY) = bottom_right
+                top_left = max_loc
+                val = max_val
+                if max_val == min_val:
+                    result = 0.0
+                elif method in [cv2.TM_CCOEFF, cv2.TM_CCOEFF_NORMED, cv2.TM_CCORR, cv2.TM_CCORR]:
+                    result = val / (max_val - min_val)
+                else:
+                    result = val
+            top_left = (top_left[0] + search_region[1], top_left[1] + search_region[0])
+            bottom_right = (top_left[0] + w, top_left[1] + h)
+            (startX, startY) = top_left
+            (endX, endY) = bottom_right
 
-        b = int(np.average(self.frame[startY:endY, startX:endX, 0]))
-        g = int(np.average(self.frame[startY:endY, startX:endX, 1]))
-        r = int(np.average(self.frame[startY:endY, startX:endX, 2]))
+            b = int(np.average(self.frame[startY:endY, startX:endX, 0]))
+            g = int(np.average(self.frame[startY:endY, startX:endX, 1]))
+            r = int(np.average(self.frame[startY:endY, startX:endX, 2]))
 
-        # r = np.average(self.frame[startX:endX, startY:endY, 0])
-        # g = np.average(self.frame[startX:endX, startY:endY, 1])
-        # b = np.average(self.frame[startX:endX, startY:endY, 2])
+            # r = np.average(self.frame[startX:endX, startY:endY, 0])
+            # g = np.average(self.frame[startX:endX, startY:endY, 1])
+            # b = np.average(self.frame[startX:endX, startY:endY, 2])
 
-        self.console.write(f"color avg RGB: {r}, {g}, {b}\n")
-        print(f"color avg RGB: {r}, {g}, {b}")
-        delta = compare_rgb((r, g, b),self.template_rgb)
+            self.console.write(f"color avg RGB: {r}, {g}, {b}\n")
+            print(f"color avg RGB: {r}, {g}, {b}")
+            delta = compare_rgb((r, g, b),self.template_rgb)
 
-        # self.console.write(
-        #     f"{meth}: detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
-        # print(
-        #     f"{meth}: detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
 
-        self.console.write(f"color diff(space:{delta[0]:.2f}, (r,g,b):({delta[1:]}) at loc: {top_left+bottom_right}\n")
-        if paint is True:
-            frame = self.frame.copy()
-        if result < threshold:
-           self.console.write(f"no template found!!!. result {result:.2f} < threshold  {threshold} in region: {search_region}\n")
-           print(f"no template found!!!. result {result:.2f} < threshold  {threshold} in region: {search_region}")
-           cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 128), 5)
-        elif delta[0] > COLOR_DISTANCE_THRESHOLD:
-            self.console.write(f"template found but color doesnt match???. color space diff {delta[0]:.2f} > {COLOR_DISTANCE_THRESHOLD}\n")
-            print(f"template found but color doesnt match???. color space diff {delta[0]:.2f} > {COLOR_DISTANCE_THRESHOLD}")
-            cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 128), 5)
-        elif sum(delta[1:]) > RGB_DIFFERENCE_THRESHOLD:
-            self.console.write(f"template found but color doesnt match???. color rgb diff {delta[1:]} > {RGB_DIFFERENCE_THRESHOLD}\n")
-            print(f"template found but color doesnt match???. color rgb diff {delta[1:]} > {RGB_DIFFERENCE_THRESHOLD}")
-            cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 128), 5)
-        else:
-            # check to see if the iteration should be visualized
-            # cv2.waitKey(0)
+            self.console.write(f"color diff(space:{delta[0]:.2f}, (r,g,b):{delta[1:]} at loc: {top_left+bottom_right}\n")
             if paint is True:
-                # draw a bounding box around the detected result and display the image
-                cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 0), 5)
-                self.console.write(f"found template result: {result:.2f} at {top_left+bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f} in region: {search_region}\n")
-                print(f"found template result: {result:.2f} at {top_left+bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}) in region: {search_region}")
-
+                frame = self.frame.copy()
+            if result < threshold:
+               self.console.write(f"no template found!!!. result {result:.2f} < threshold  {threshold} in region: {search_region}\n")
+               print(f"no template found!!!. result {result:.2f} < threshold  {threshold} in region: {search_region}")
+               cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 0, 128), 5)
+            elif delta[0] > COLOR_DISTANCE_THRESHOLD:
+                self.console.write(
+                    f"detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
+                print(
+                    f"detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
+                self.console.write(f"template found but color doesnt match???. color space diff {delta[0]:.2f} > {COLOR_DISTANCE_THRESHOLD}\n")
+                print(f"template found but color doesnt match???. color space diff {delta[0]:.2f} > {COLOR_DISTANCE_THRESHOLD}")
+                cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 0, 128), 5)
+            elif sum(delta[1:]) > RGB_DIFFERENCE_THRESHOLD:
+                self.console.write(
+                    f"detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
+                print(
+                    f"detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
+                self.console.write(f"template found but color doesnt match???. color rgb diff {delta[1:]} > {RGB_DIFFERENCE_THRESHOLD}\n")
+                print(f"template found but color doesnt match???. color rgb diff {delta[1:]} > {RGB_DIFFERENCE_THRESHOLD}")
+                cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 128), 5)
+            else:
+                # check to see if the iteration should be visualized
+                # cv2.waitKey(0)
+                if paint is True:
+                    # draw a bounding box around the detected result and display the image
+                    cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 0), 5)
+                    self.console.write(f"found template result: {result:.2f} at {top_left+bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f} in region: {search_region}\n")
+                    print(f"found template result: {result:.2f} at {top_left+bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}) in region: {search_region}")
+                break
+            if max_tries > 1:
+                if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
+                    method  = cv2.TM_CCORR + method - cv2.TM_SQDIFF
+                elif method in [cv2.TM_CCORR, cv2.TM_CCORR_NORMED]:
+                    method  = cv2.TM_SQDIFF + method - cv2.TM_CCORR
+                elif method in [cv2.TM_CCOEFF, cv2.TM_CCOEFF_NORMED]:
+                    method  = cv2.TM_SQDIFF + method - cv2.TM_CCOEFF
+                self.console.write(f"try different method: {method} again\n")
 
         if paint is True:
             self.image_item_page.setImage(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))

@@ -19,7 +19,7 @@ import json
 
 
 import time
-from image import compare_rgb, search_corners
+from image import compare_rgb, search_corners, compare_distance
 VERSION = "0.0.1"
 
 class MyImageItem(pg.ImageItem):
@@ -559,7 +559,7 @@ class CalibrationView(QMainWindow):
                 self.videos.append(fname)
 
     def on_load_pages(self):
-        fnames = QFileDialog.getOpenFileNames(self, '=Load pages', './', "Image files (*.png)")
+        fnames = QFileDialog.getOpenFileNames(self, '=Load pages', './', "Image files (*.png;*.jpg)")
         print(f"load page: {fnames}")
         if fnames[0] != '':
             for fname in fnames[0]:
@@ -649,15 +649,15 @@ class CalibrationView(QMainWindow):
         if blurring_type == 0:
             self.denoised_frame = cv2.blur(self.frame, (3, 3))
         elif blurring_type == 1:
-            self.denoised_frame = cv2.blur(self.frame, (5, 5))
+            self.denoised_frame = cv2.blur(self.frame, (60, 60))
         elif blurring_type == 2:
             self.denoised_frame = cv2.GaussianBlur(self.frame, (3, 3), 3)
         elif blurring_type == 3:
-            self.denoised_frame = cv2.GaussianBlur(self.frame, (5, 5), 5)
+            self.denoised_frame = cv2.GaussianBlur(self.frame, (15*3, 15*3), 0)
         elif blurring_type == 4:
             self.denoised_frame = cv2.medianBlur(self.frame, 3)
         elif blurring_type == 5:
-            self.denoised_frame = cv2.medianBlur(self.frame, 5)
+            self.denoised_frame = cv2.medianBlur(self.frame, 50)
         elif blurring_type == 6:
             self.denoised_frame = cv2.bilateralFilter(self.frame, 9, sigmaColor=75, sigmaSpace=75)
         self.console.write(f"denoise with '{self.cb_image_blurring.currentText()}' spent: {((time.clock()-start) * 1000):.3f} ms\n")
@@ -678,7 +678,6 @@ class CalibrationView(QMainWindow):
         self.edit_color_space_threshold.setText(self.DEF_COLOR_DISTANCE_THRESHOLD)
 
     def on_btn_search_anchors(self):
-
         # load the image and compute the ratio of the old height
         # to the new height, clone it, and resize it
         tl, tr, bl, br, width, height = search_corners(self.frame)
@@ -712,7 +711,7 @@ class CalibrationView(QMainWindow):
         bot_right = list(map(int, self.edit_deskew_bot_right.text().split(',')))
         pts1 = np.float32([top_left, top_right, bot_left, bot_right])
         width,height =  list(map(int, self.edit_deskew_dim.text().split(',')))
-        pts2 = np.float32([[0, 0], [width, 0], [0, 1080], [width, height]])
+        pts2 = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
         M = cv2.getPerspectiveTransform(pts1, pts2)
         self.deskewed_frame = cv2.warpPerspective(img, M, (width, height))
         self.image_item_page.setImage(cv2.cvtColor(self.deskewed_frame, cv2.COLOR_BGR2RGB))

@@ -40,17 +40,32 @@ def compare_rgb(rgb1, rgb2):
     delta_b = abs((rgb1[2]-m1) - (rgb2[2]-m2))
     return (delta_e, delta_r, delta_g, delta_b)
 
+def compare_distance(rgb1, rgb2):
+    color1_rgb = sRGBColor(rgb1[0]/255, rgb1[1]/255, rgb1[2]/255);
+    color2_rgb = sRGBColor(rgb2[0]/255, rgb2[1]/255, rgb2[2]/255);
+
+    # Convert from RGB to Lab Color Space
+    color1_lab = convert_color(color1_rgb, LabColor);
+
+    # Convert from RGB to Lab Color Space
+    color2_lab = convert_color(color2_rgb, LabColor);
+    return delta_e_cie2000(color1_lab, color2_lab);
+
+
 def search_corners(frame):
     # convert the image to grayscale, blur it, and find edges
     # in the image
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (15, 15), 0)
+    blur = cv2.pyrMeanShiftFiltering(frame, 21, 51)
+    gray = cv2.cvtColor(blur, cv2.COLOR_BGR2GRAY)
+    # gray = cv2.GaussianBlur(gray, (15, 15), 0)
     # blur = cv2.GaussianBlur(gray, (1, 1), 1000)
-    edged = cv2.Canny(gray, 75, 200)
+    # edged = cv2.Canny(gray, 75, 200)
+    ret, threshold = cv2.threshold(gray, 20,255, cv2.THRESH_BINARY)
 
     # find the contours in the edged image, keeping only the
     # largest ones, and initialize the screen contour
-    cnts = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # cnts = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnts = cv2.findContours(threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     # cnts = cnts[0] if imutils.is_cv2() else cnts[1]
     cnts = cnts[1] if imutils.is_cv2() else cnts[0]
     cnts = sorted(cnts, key=cv2.contourArea, reverse=True)[:5]
@@ -69,7 +84,7 @@ def search_corners(frame):
             break
     if screenCnt is None:
         print(f"search anchors fail")
-        return None, None, None, None, None, None, screenCnt
+        return None, None, None, None, None, None
     else:
         print(f"search anchors found: {approx}")
         # update edit box

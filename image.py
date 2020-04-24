@@ -52,7 +52,7 @@ def compare_distance(rgb1, rgb2):
     return delta_e_cie2000(color1_lab, color2_lab);
 
 
-def search_corners(frame):
+def search_corners(frame, threshold=10):
     # convert the image to grayscale, blur it, and find edges
     # in the image
     blur = cv2.pyrMeanShiftFiltering(frame, 21, 51)
@@ -60,7 +60,7 @@ def search_corners(frame):
     # gray = cv2.GaussianBlur(gray, (15, 15), 0)
     # blur = cv2.GaussianBlur(gray, (1, 1), 1000)
     # edged = cv2.Canny(gray, 75, 200)
-    ret, threshold = cv2.threshold(gray, 20,255, cv2.THRESH_BINARY)
+    ret, threshold = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
 
     # find the contours in the edged image, keeping only the
     # largest ones, and initialize the screen contour

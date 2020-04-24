@@ -43,7 +43,8 @@ class CalibrationView(QMainWindow):
         self.videos = []
         self.pages = list(pages)
         self.templates = list(templates)
-        self.DEF_COLOR_DISTANCE_THRESHOLD = "15.0"
+        self.DEF_TEMP_MATCH_THRESHOLD = 0.80
+        self.DEF_COLOR_DISTANCE_THRESHOLD = "25.0"
         self.DEF_RGB_DIFFERENCE_THRESHOLD = "50"
         self.DEF_SCREEN_DIM = "1920,1080"
         self.DEF_SCALE_DIM = "1280,720"
@@ -123,20 +124,21 @@ class CalibrationView(QMainWindow):
 
 
         # deskew
-        self.label_deskew_dim = QLabel("Screen size(w,h):")
+        self.label_deskew_dim = QLabel("Deskewed screen size(w,h):")
         self.edit_deskew_dim = QLineEdit()
         self.edit_deskew_dim.setText(self.DEF_SCREEN_DIM)
-        self.label_deskew_top_left = QLabel("Top left anchor(x,y):")
+        self.label_deskew_top_left = QLabel("Top left corner(x,y):")
         self.edit_deskew_top_left = QLineEdit()
-        self.label_deskew_top_right = QLabel("Top right anchor(x,y):")
+        self.label_deskew_top_right = QLabel("Top right corner(x,y):")
         self.edit_deskew_top_right = QLineEdit()
-        self.label_deskew_bot_left = QLabel("Bottom left anchor(x,y):")
+        self.label_deskew_bot_left = QLabel("Bottom left corner(x,y):")
         self.edit_deskew_bot_left = QLineEdit()
-        self.label_deskew_bot_right = QLabel("Bottom right anchor(x,y):")
+        self.label_deskew_bot_right = QLabel("Bottom right corner(x,y):")
         self.edit_deskew_bot_right = QLineEdit()
-        self.btn_search_anchors = QPushButton('Search anchors automatically')
+        self.btn_search_anchors = QPushButton('Search corners automatically')
         self.btn_deskew = QPushButton('deskew screen')
         self.btn_save_deskewed_screen = QPushButton('save deskewed screen')
+        self.cb_apply_deskewed_screen =QCheckBox('Apply deskew to video')
         self.label_scale_dim = QLabel("Scale screen size to (w,h):")
         self.edit_scale_dim = QLineEdit()
         self.edit_scale_dim.setText(self.DEF_SCALE_DIM)
@@ -156,6 +158,7 @@ class CalibrationView(QMainWindow):
         self.dk_deskew.addWidget(self.btn_search_anchors, row=3, col=0)
         self.dk_deskew.addWidget(self.btn_deskew, row=3, col=1)
         self.dk_deskew.addWidget(self.btn_save_deskewed_screen, row=3, col=2)
+        self.dk_deskew.addWidget(self.cb_apply_deskewed_screen, row=3, col=3)
         self.dk_deskew.addWidget(self.label_scale_dim, row=4, col=0)
         self.dk_deskew.addWidget(self.edit_scale_dim, row=4, col=1)
         self.dk_deskew.addWidget(self.btn_scale, row=4, col=2)
@@ -454,6 +457,7 @@ class CalibrationView(QMainWindow):
 
         # Read until video is completed
         frames = 0
+        apply_deskewed_screen = self.cb_apply_deskewed_screen.isChecked()
         start = time.time()
         while self.cap.isOpened() and self.start_streaming is True and self.pause_video is False:
             # Capture frame-by-frame
@@ -462,7 +466,10 @@ class CalibrationView(QMainWindow):
                 frames += 1
                 self.current_frame += 1
                 self.frame_slider.position(self.current_frame)
-                self.image_item_page.setImage(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB))
+                if apply_deskewed_screen:
+                    self.on_btn_deskew()
+                else:
+                    self.image_item_page.setImage(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB))
 
                 # Press Q on keyboard to exit
                 # if cv2.waitKey(25) & 0xFF == ord('q'):
@@ -483,6 +490,7 @@ class CalibrationView(QMainWindow):
             self.cap.release()
             # Closes all the frames
             cv2.destroyAllWindows()
+            self.start_streaming = False
 
     ''' refresh frame window,
      called when new frame needs to be painted,
@@ -569,7 +577,7 @@ class CalibrationView(QMainWindow):
             self.cb_page.setCurrentIndex(len(self.pages)-1)
 
     def on_load_templates(self):
-        fnames = QFileDialog.getOpenFileNames(self, '=Load templates','./', "Image files (*.png)")
+        fnames = QFileDialog.getOpenFileNames(self, '=Load templates','./', "Image files (*.png;*.jpg)")
         print(f"load template: {fnames}")
         if fnames[0] !=  '':
             for fname in fnames[0]:
@@ -678,12 +686,21 @@ class CalibrationView(QMainWindow):
         self.edit_color_space_threshold.setText(self.DEF_COLOR_DISTANCE_THRESHOLD)
 
     def on_btn_search_anchors(self):
+        # blur = cv2.pyrMeanShiftFiltering(self.frame, 21, 51)
+        # gray = cv2.cvtColor(blur, cv2.COLOR_BGR2GRAY)
+        # threshold1 = 8
+        # threshold2 = 255
+        # ret, threshold = cv2.threshold(gray, threshold1, threshold2, cv2.THRESH_BINARY)
+        # self.image_item_page.setImage(cv2.cvtColor(threshold, cv2.COLOR_GRAY2RGB))
+        # return
         # load the image and compute the ratio of the old height
         # to the new height, clone it, and resize it
-        tl, tr, bl, br, width, height = search_corners(self.frame)
+        threshold=8
+        start = time.clock()
+        tl, tr, bl, br, width, height = search_corners(self.frame, threshold)
         image = self.frame.copy() # cv2.imread('cards/red8.jpg')
         if tl is not None:
-            self.console.write(f"search anchors succeeds")
+            self.console.write(f"search anchors succeeds, ")
             # cv2.drawContours(image, [[tl],[tr],[bl],[br]], -1, (0, 255, 0), 2)
             cv2.line(image, tuple(tl), tuple(tr), (0, 255, 0), 2)
             cv2.line(image, tuple(tr), tuple(br), (0, 255, 0), 2)
@@ -699,8 +716,8 @@ class CalibrationView(QMainWindow):
 
             self.edit_deskew_dim.setText(f"{width},{height}")
         else:
-            self.console.write(f"search anchors fails")
-
+            self.console.write(f"search anchors fails!!! ")
+        self.console.write(f"search conners spent: {((time.clock()-start) * 1000):.3f} ms\n ")
 
     def on_btn_deskew(self):
         img = self.frame
@@ -863,8 +880,9 @@ class CalibrationView(QMainWindow):
         if debug:
             print(f"color avg RGB: {r}, {g}, {b}\n")
 
-    def template_matching(self, template_file=None, frame=None,  threshold=0.60, paint=True):
-
+    def template_matching(self, template_file=None, frame=None,  threshold=None, paint=True):
+        if threshold is None:
+            threshold = self.DEF_TEMP_MATCH_THRESHOLD
         COLOR_DISTANCE_THRESHOLD = float(self.edit_color_space_threshold.text())
         RGB_DIFFERENCE_THRESHOLD = int(self.edit_rgb_diff_threshold.text())
         # load the image, convert it to grayscale, and initialize the

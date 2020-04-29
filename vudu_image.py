@@ -9,6 +9,9 @@
 import cv2
 import imutils
 import numpy as np
+import pytesseract
+from cv2 import imwrite, cvtColor, COLOR_BGR2GRAY
+
 
 
 from colormath.color_objects import sRGBColor, LabColor
@@ -18,27 +21,20 @@ from colormath.color_diff import delta_e_cie2000
 # compare the difference of two colors
 # return a list of four floats,
 # 1.  distance of two color in color spectrum space.
-# 2.  difference of r - cutoff
-# 3.  difference of g - cutoff
-# 4.  difference of b - cutoff
+# 2.  difference of r1,r2 - cutoff
+# 3.  difference of g1, g2 - cutoff
+# 4.  difference of b1, b2 - cutoff
+# cutoff = min(r,g,b)
+
 def compare_rgb(rgb1, rgb2):
-    color1_rgb = sRGBColor(rgb1[0]/255, rgb1[1]/255, rgb1[2]/255);
-    color2_rgb = sRGBColor(rgb2[0]/255, rgb2[1]/255, rgb2[2]/255);
 
-    # Convert from RGB to Lab Color Space
-    color1_lab = convert_color(color1_rgb, LabColor);
-
-    # Convert from RGB to Lab Color Space
-    color2_lab = convert_color(color2_rgb, LabColor);
-
-    # Find the color difference
-    delta_e = delta_e_cie2000(color1_lab, color2_lab);
+    space_diff = compare_distance(rgb1, rgb2)
     m1 = min(rgb1) # cutoff is the min of three
     m2 = min(rgb2)
     delta_r = abs((rgb1[0]-m1) - (rgb2[0]-m2))
     delta_g = abs((rgb1[1]-m1) - (rgb2[1]-m2))
     delta_b = abs((rgb1[2]-m1) - (rgb2[2]-m2))
-    return (delta_e, delta_r, delta_g, delta_b)
+    return (space_diff, delta_r, delta_g, delta_b)
 
 def compare_distance(rgb1, rgb2):
     color1_rgb = sRGBColor(rgb1[0]/255, rgb1[1]/255, rgb1[2]/255);
@@ -52,6 +48,15 @@ def compare_distance(rgb1, rgb2):
     return delta_e_cie2000(color1_lab, color2_lab);
 
 
+# search_corners
+# search the corners of the skewed image.
+# the function find the largest contour and return the image's corners and width and height of the fixed image.
+# inputs -
+# frame: skewed image in BGR format
+# threshold: valid vaule is in the range of 0 to 255
+# When a  color  < threshold, it is assigned as black, when color > then threshold is assigned as white
+# return -
+# top_left, top_right, bottom_left, bottom_right, width, height
 def search_corners(frame, threshold=10):
     # convert the image to grayscale, blur it, and find edges
     # in the image
@@ -130,6 +135,18 @@ def search_corners(frame, threshold=10):
             [maxWidth - 1, maxHeight - 1],
             [0, maxHeight - 1]], dtype="float32")
         return tl,tr,bl,br,maxWidth,maxHeight
+
+
+def ocr(frame, region=None, grayscale=False):
+    if region is not None:
+        _frame = frame[region[0]:region[2], dim[1]:dim[3]]
+    else:
+        _frame =  frame
+    if grayscale is Ture:
+        _frame = cvtColor(_frame)
+
+    text = pytesseract.image_to_string(_frame)
+    return text
 
 if __name__ == "__main__":
 

@@ -19,7 +19,7 @@ import json
 
 
 import time
-from image import compare_rgb, search_corners, compare_distance
+from vudu_image import compare_rgb, search_corners, compare_distance
 VERSION = "0.0.1"
 
 class MyImageItem(pg.ImageItem):
@@ -124,7 +124,7 @@ class CalibrationView(QMainWindow):
 
 
         # deskew
-        self.label_deskew_dim = QLabel("Deskewed screen size(w,h):")
+        self.label_deskew_dim = QLabel("Deskew screen size(w,h):")
         self.edit_deskew_dim = QLineEdit()
         self.edit_deskew_dim.setText(self.DEF_SCREEN_DIM)
         self.label_deskew_top_left = QLabel("Top left corner(x,y):")
@@ -135,11 +135,11 @@ class CalibrationView(QMainWindow):
         self.edit_deskew_bot_left = QLineEdit()
         self.label_deskew_bot_right = QLabel("Bottom right corner(x,y):")
         self.edit_deskew_bot_right = QLineEdit()
-        self.btn_search_anchors = QPushButton('Search corners automatically')
+        self.btn_search_corners = QPushButton('Search corners')
         self.btn_deskew = QPushButton('deskew screen')
         self.btn_save_deskewed_screen = QPushButton('save deskewed screen')
         self.cb_apply_deskewed_screen =QCheckBox('Apply deskew to video')
-        self.label_scale_dim = QLabel("Scale screen size to (w,h):")
+        self.label_scale_dim = QLabel("Scale screen to (w,h):")
         self.edit_scale_dim = QLineEdit()
         self.edit_scale_dim.setText(self.DEF_SCALE_DIM)
         self.btn_scale = QPushButton('scale screen')
@@ -155,7 +155,7 @@ class CalibrationView(QMainWindow):
         self.dk_deskew.addWidget(self.edit_deskew_bot_left, row=2, col=1)
         self.dk_deskew.addWidget(self.label_deskew_bot_right, row=2, col=2)
         self.dk_deskew.addWidget(self.edit_deskew_bot_right, row=2, col=3)
-        self.dk_deskew.addWidget(self.btn_search_anchors, row=3, col=0)
+        self.dk_deskew.addWidget(self.btn_search_corners, row=3, col=0)
         self.dk_deskew.addWidget(self.btn_deskew, row=3, col=1)
         self.dk_deskew.addWidget(self.btn_save_deskewed_screen, row=3, col=2)
         self.dk_deskew.addWidget(self.cb_apply_deskewed_screen, row=3, col=3)
@@ -166,7 +166,7 @@ class CalibrationView(QMainWindow):
 
         self.btn_save_deskewed_screen.clicked.connect(self.on_btn_save_deskewed_screen)
         self.btn_save_scaled_screen.clicked.connect(self.on_btn_save_scaled_screen)
-        self.btn_search_anchors.clicked.connect(self.on_btn_search_anchors)
+        self.btn_search_corners.clicked.connect(self.on_btn_search_corners)
         self.btn_deskew.clicked.connect(self.on_btn_deskew)
         self.btn_scale.clicked.connect(self.on_btn_scale)
 
@@ -279,7 +279,7 @@ class CalibrationView(QMainWindow):
         self.btn_start_video.clicked.connect(self.on_btn_start_video)
         self.btn_stop_video.clicked.connect(self.on_btn_stop_video)
         self.btn_start_camera.clicked.connect(self.on_btn_start_camera)
-        self.btn_stop_camera.clicked.connect(self.on_btn_start_camera)
+        self.btn_stop_camera.clicked.connect(self.on_btn_stop_camera)
         self.btn_search.clicked.connect(self.on_btn_search)
         self.btn_search_all.clicked.connect(self.run_all)
         self.btn_ocr_roi = QPushButton('OCR ROI')
@@ -353,7 +353,7 @@ class CalibrationView(QMainWindow):
         self.start_streaming = False
         self.pause_video = False
 
-    def on_btn_start_camera(self):
+    def on_btn_stop_camera(self):
         self.start_streaming = False
 
     def streaming(self, camera="0"):
@@ -521,10 +521,15 @@ class CalibrationView(QMainWindow):
             dim[0] = 0
         if dim[1] < 0:
             dim[1] = 0
-        if dim[2] > self.frame.shape[1]:
-            dim[2] = self.frame.shape[1]
-        if dim[3] > self.frame.shape[0]:
-            dim[3] = self.frame.shape[0]
+
+        if dim[2] >= self.frame.shape[1]:
+            dim[2] = self.frame.shape[1]-1
+        if dim[0] >= dim[2]:
+            dim[0] = dim[2] - 1
+        if dim[3] >= self.frame.shape[0]:
+            dim[3] = self.frame.shape[0]-1
+        if dim[1] >= dim[3]:
+            dim[1] = dim[3] - 1
         # print(f"on_change_rect_roi dim: {dim}")
         b = int(np.average(self.frame[dim[1]:dim[3], dim[0]:dim[2], 0]))
         g = int(np.average(self.frame[dim[1]:dim[3], dim[0]:dim[2], 1]))
@@ -685,7 +690,7 @@ class CalibrationView(QMainWindow):
         self.edit_rgb_diff_threshold.setText(self.DEF_RGB_DIFFERENCE_THRESHOLD)
         self.edit_color_space_threshold.setText(self.DEF_COLOR_DISTANCE_THRESHOLD)
 
-    def on_btn_search_anchors(self):
+    def on_btn_search_corners(self):
         # blur = cv2.pyrMeanShiftFiltering(self.frame, 21, 51)
         # gray = cv2.cvtColor(blur, cv2.COLOR_BGR2GRAY)
         # threshold1 = 8
@@ -700,7 +705,7 @@ class CalibrationView(QMainWindow):
         tl, tr, bl, br, width, height = search_corners(self.frame, threshold)
         image = self.frame.copy() # cv2.imread('cards/red8.jpg')
         if tl is not None:
-            self.console.write(f"search anchors succeeds, ")
+            self.console.write(f"search corners succeeds, ")
             # cv2.drawContours(image, [[tl],[tr],[bl],[br]], -1, (0, 255, 0), 2)
             cv2.line(image, tuple(tl), tuple(tr), (0, 255, 0), 2)
             cv2.line(image, tuple(tr), tuple(br), (0, 255, 0), 2)
@@ -716,7 +721,7 @@ class CalibrationView(QMainWindow):
 
             self.edit_deskew_dim.setText(f"{width},{height}")
         else:
-            self.console.write(f"search anchors fails!!! ")
+            self.console.write(f"search corners fails!!! ")
         self.console.write(f"search conners spent: {((time.clock()-start) * 1000):.3f} ms\n ")
 
     def on_btn_deskew(self):
@@ -976,8 +981,8 @@ class CalibrationView(QMainWindow):
             if paint is True:
                 frame = self.frame.copy()
             if result < threshold:
-               self.console.write(f"no template found!!!. result {result:.2f} < threshold  {threshold} in region: {search_region}\n")
-               print(f"no template found!!!. result {result:.2f} < threshold  {threshold} in region: {search_region}")
+               self.console.write(f"no template found!!!. result {result:.2f} < threshold  {threshold} ({min_val:.2f}, {max_val:.2f}) in region: {search_region}\n")
+               print(f"no template found!!!. result {result:.2f} < threshold  {threshold} ({min_val:.2f}, {max_val:.2f}) in region: {search_region}")
                cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 0, 128), 5)
             elif delta[0] > COLOR_DISTANCE_THRESHOLD:
                 self.console.write(
@@ -1093,40 +1098,42 @@ if __name__ == '__main__':
             verbose = True
 
     if page_file == None and template_file == None:
-        print("error:  file(s) not found")
-        # usage()
+        print("warning:  page/template file(s) not found")
+        usage()
         sys.exit(2)
 
     try:
         pages = []
-        with open(page_file, "rt") as f:
-            for line in f:
-                line = line.rstrip("\n")
-                line = line.rstrip()
-                if line == "" or line[0] == '#':
-                    continue
-                print("read {}".format(line))
-                pages += glob.glob(line)
+        if page_file is not None:
+            with open(page_file, "rt") as f:
+                for line in f:
+                    line = line.rstrip("\n")
+                    line = line.rstrip()
+                    if line == "" or line[0] == '#':
+                        continue
+                    print("read {}".format(line))
+                    pages += glob.glob(line)
     except Exception as e:
         print("error: fail to open {}. {} ".format(page_file, e))
         exit(2)
-    if len(pages) == 0:
+    if page_file is not None and len(pages) == 0:
         print("error: no page found in {}".format(page_file))
         exit(2)
     try:
         templates = []
-        with open(template_file, "rt") as f:
-            for line in f:
-                line = line.rstrip("\n")
-                line = line.rstrip()
-                if line == "" or line[0] == '#':
-                    continue
-                print("read {}".format(line))
-                templates += glob.glob(line)
+        if template_file is not None:
+            with open(template_file, "rt") as f:
+                for line in f:
+                    line = line.rstrip("\n")
+                    line = line.rstrip()
+                    if line == "" or line[0] == '#':
+                        continue
+                    print("read {}".format(line))
+                    templates += glob.glob(line)
     except Exception as e:
         print("error: fail to open {}. {} ".format(template_file, e))
         exit(2)
-    if len(templates) == 0:
+    if template_file is not None and len(templates) == 0:
         print("error: no template found in {}".format(template_file))
         exit(2)
 

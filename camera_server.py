@@ -29,6 +29,7 @@ def debug(str):
 # curl --request get http://localhost:5000/get_live
 # broadcast video to address
 # address = ip:port e.g. 192.168.8.3:12345
+# TBD: Add parameters to control w, h and rate
 @app.route('/start_live/<address>')
 def start_live(address):
     debug(f"=== rest api:get_live {address} ===")

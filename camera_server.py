@@ -6,8 +6,14 @@ import time
 # pip install flask
 # pip install flask_extension
 # pip install Werkzeug == 0.15
+# pip install ffmpeg-python
+import os
+import signal
+import subprocess
 from flask import Flask, session, make_response
 from flask_session import Session
+import config
+
 
 app = Flask(__name__)
 print(f"__name__={__name__}")
@@ -21,10 +27,35 @@ def debug(str):
     print(str)
 
 # curl --request get http://localhost:5000/get_live
-# capture new frame
-@app.route('/get_live')
-def get_live():
-    debug("=== rest api:get_live ===")
+# broadcast video to address
+# address = ip:port e.g. 192.168.8.3:12345
+@app.route('/start_live/<address>')
+def start_live(address):
+    debug(f"=== rest api:get_live {address} ===")
+    config.CAMERA_ID
+
+    ffmpeg = f"ffmpeg -f {config.INPUT_DEVICE} -framerate 30 -video_size 1280x720 -i '{config.CAMERA_ID}:none' -vcodec libx264 " \
+                 f"-preset ultrafast -tune zerolatency -pix_fmt yuv422p -f mpegts udp://{address}"
+    # ffmpeg -f avfoundation -framerate 30 -video_size 1280x720 -i "0:none" -vcodec libx264 -preset ultrafast
+    #        -tune zerolatency -pix_fmt yuv422p -f mpegts udp://192.168.8.3:12345
+    # return_code = subprocess.run([ffmpeg], shell=True)
+    # debug(f"=== subprocess.run return {return_code} ===")
+    process = subprocess.Popen(ffmpeg, shell=True)
+    debug(f"=== subprocess.Popen return {process.pid} ===")
+    session["ffmpeg_process"] = process.pid
+    debug(f"process: {process.pid}")
+    debug(f"process: {session['ffmpeg_process']}")
+    return "success"
+
+@app.route('/stop_live')
+def stop_live():
+    debug(f"=== rest api:stop_live ===")
+    if 'ffmpeg_process' not in session:
+        return "success"
+    debug(f"kill process: {session['ffmpeg_process']}")
+    # os.killpg(os.getpgid(session['ffmpeg_process']), signal.SIGTERM)
+    # os.killpg(session['ffmpeg_process'], signal.SIGTERM)
+    os.kill(session['ffmpeg_process'], signal.SIGTERM)
     return "success"
 
 
@@ -54,8 +85,16 @@ def get_frame():
 @app.route('/_frame')
 def _frame():
     debug("=== rest_api:_frame ===")
-    debug(f"session: {session}")
+    # debug(f"session: {session}")
+    # debug(f"session type: {type(session)}")
+    # if 'test' not in session:
+    #     session['test'] = 1
+    #     debug(f"set session[test]={session['test']}")
+    # else:
+    #     debug(f"get session[test]={session['test']}")
+    # return "success"
     if 'frame' not in session:
+        debug(f"no frame found in seesion")
         return get_frame()
     # put _frame in response
     debug(f"put current _frame to response ===")

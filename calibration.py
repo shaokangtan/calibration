@@ -379,6 +379,7 @@ class CalibrationView(QMainWindow):
             if player_frame_control is True and int(time.time() * 1000) % player_spf != 0:
                 continue
             ret, self.frame = cap.read()
+            assert (ret, "cap.read fails")
             frames += 1
             self.image_item_page.setImage(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB))
             QtGui.QGuiApplication.processEvents()
@@ -391,7 +392,7 @@ class CalibrationView(QMainWindow):
             #     break
         cap.release()
         cv2.destroyAllWindows()
-        print(f"{frames / (time.clock() - start)} fp/s")
+        print(f"{frames / (time.time() - start)} fp/s")
 
     def sim(self, calculate=True):
         self.template_avg()

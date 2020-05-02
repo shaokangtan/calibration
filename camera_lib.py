@@ -136,32 +136,35 @@ class Camera():
 
 
 if __name__ == "__main__":
-   # URL = 'http://localhost:5000'
-   URL = 'http://0.0.0.0:33'
-   cam = Camera()
-   status = cam.allocate_camera(URL)
-   print(f"response: {status}")
+    import os
+    if not os.path.exists('output'):
+        os.makedirs('output')
+    # URL = 'http://localhost:5000'
+    URL = 'http://0.0.0.0:33'
+    cam = Camera()
+    status = cam.allocate_camera(URL)
+    print(f"response: {status}")
 
-   status = cam._frame(path = 'output/_frame.png')
-   print(f"response: {status}")
-   assert 200 == status
+    status = cam._frame(path = 'output/_frame.png')
+    print(f"response: {status}")
+    assert 200 == status
 
-   status = cam.get_frame(path = 'output/new_frame.png')
-   print(f"response: {status}")
-   assert 200 == status
+    status = cam.get_frame(path = 'output/new_frame.png')
+    print(f"response: {status}")
+    assert 200 == status
 
-   status = cam.start_live('127.0.0.1:12345')
-   print(f"response: {status}")
-   assert 200 == status
+    status = cam.start_live('127.0.0.1:12345')
+    print(f"response: {status}")
+    assert 200 == status
 
-   status = cam.stop_live()
-   print(f"response: {status}")
-   assert 200 == status
+    status = cam.stop_live()
+    print(f"response: {status}")
+    assert 200 == status
 
-   status = cam.free_camera()
-   print(f"response: {status}")
-   assert 200 == status
+    status = cam.free_camera()
+    print(f"response: {status}")
+    assert 200 == status
 
-   # status, ret = match('./images/test/playerBack.png')
-   # status, ret = ocr([0,0,320,320])
+    # status, ret = match('./images/test/playerBack.png')
+    # status, ret = ocr([0,0,320,320])
 

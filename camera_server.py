@@ -5,6 +5,7 @@ import cv2
 import time
 # pip install flask
 # pip install flask_extension
+# pip install Flask_Session
 # pip install Werkzeug == 0.15
 # pip install ffmpeg-python
 import os
@@ -33,8 +34,6 @@ def debug(str):
 @app.route('/start_live/<address>')
 def start_live(address):
     debug(f"=== rest api:get_live {address} ===")
-    config.CAMERA_ID
-
     ffmpeg = f"ffmpeg -f {config.INPUT_DEVICE} -framerate 30 -video_size 1280x720 -i '{config.CAMERA_ID}:none' -vcodec libx264 " \
                  f"-preset ultrafast -tune zerolatency -pix_fmt yuv422p -f mpegts udp://{address}"
     # ffmpeg -f avfoundation -framerate 30 -video_size 1280x720 -i "0:none" -vcodec libx264 -preset ultrafast

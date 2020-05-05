@@ -19,7 +19,7 @@ import json
 
 
 import time
-from vudu_image import compare_rgb, search_corners, compare_distance
+from vudu_image import compare_rgb, search_corners, match
 VERSION = "0.0.1"
 
 class MyImageItem(pg.ImageItem):
@@ -891,137 +891,81 @@ class CalibrationView(QMainWindow):
             threshold = self.DEF_TEMP_MATCH_THRESHOLD
         COLOR_DISTANCE_THRESHOLD = float(self.edit_color_space_threshold.text())
         RGB_DIFFERENCE_THRESHOLD = int(self.edit_rgb_diff_threshold.text())
-        # load the image, convert it to grayscale, and initialize the
-        # bookkeeping variable to keep track of the matched region
+        search_region = list(map(int, self.edit_template_search_region.text().split(',')))
+        # swap row and col
+        # search_region[0], search_region[1], search_region[2], search_region[3], = search_region[1], search_region[0], \
+        #                                                                           search_region[3], search_region[2]
         if frame is not None:
             # img = frame
-            img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            img = frame.copy()
         else:
-            # img = cv2.imread(self.cb_page.currentText(), 0)
-            img = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
-        template = cv2.imread(template_file, 0)
-        w, h = template.shape[::-1]
+            img = self.frame.copy()
 
-        # All the 6 methods for comparison in a list
-        # methods = ['cv2.TM_CCOEFF', 'cv2.TM_CCOEFF_NORMED', 'cv2.TM_CCORR',
-        #            'cv2.TM_CCORR_NORMED', 'cv2.TM_SQDIFF', 'cv2.TM_SQDIFF_NORMED']
-        search_region= list(map(int, self.edit_template_search_region.text().split(',')))
-        # swap row and col
-        search_region[0],search_region[1],search_region[2],search_region[3], = search_region[1],search_region[0],search_region[3],search_region[2]
         # handle default region
         if search_region[0] < 0:
             search_region[0] = 0
         if search_region[1] < 0:
             search_region[1] = 0
         if search_region[2] < 0:
-            search_region[2] = img.shape[0]
+            search_region[2] = img.shape[1]
         if search_region[3] < 0:
-            search_region[3] = img.shape[1]
-        if search_region[2] > img.shape[0]:
+            search_region[3] = img.shape[0]
+        if search_region[2] > img.shape[1]:
             self.console.output(f"template search region: {search_region} > image size: {img.shape}\n")
-            search_region[2] = img.shape[0]
-        if search_region[3] > img.shape[1]:
+            search_region[2] = img.shape[1]
+        if search_region[3] > img.shape[0]:
             self.console.output(f"template search region: {search_region} > image size: {img.shape}\n")
-            search_region[3] = img.shape[1]
+            search_region[3] = img.shape[0]
         method = eval(self.cb_template_search_methods.currentText())
+        template = cv2.imread(template_file)
+        h, w, d = template.shape[::]
+        if search_region[2] - search_region[0] < template.shape[1] or search_region[3] - search_region[1] < \
+                template.shape[0]:
+            self.console.write(f"error: search region < template size")
+            print(f"error: search region < template size")
+            return
 
         if self.cb_try_diff_temp_search_if_fail.isChecked() is True:
-            max_tries = 2
+            match_method = -1
         else:
-            max_tries = 1
-        for i in range(max_tries):
-            # Apply template Matching
-            res = cv2.matchTemplate(img[search_region[0]:search_region[2],search_region[1]:search_region[3]], template, method)
-            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+            match_method = method
+        match_result = match(template, img, search_region, match_parameter=(match_method, threshold,
+                                                                COLOR_DISTANCE_THRESHOLD, RGB_DIFFERENCE_THRESHOLD))
 
-            '''
-            # get all the matches:
-            res2 = np.reshape(res, res.shape[0] * res.shape[1])
-            sort = np.argsort(res2)
-            (y1, x1) = np.unravel_index(sort[0], res.shape)  # best match
-            (y2, x2) = np.unravel_index(sort[1], res.shape)  # second best match
-            '''
-
-
-            # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
-            if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
-                top_left = min_loc
-                val = min_val
-                if  max_val == min_val:
-                    result = 0.0
-                else:
-                    result = 1.0 - val / (max_val) # - min_val)
-            else:
-                top_left = max_loc
-                val = max_val
-                if max_val == min_val:
-                    result = 0.0
-                elif method in [cv2.TM_CCOEFF, cv2.TM_CCOEFF_NORMED, cv2.TM_CCORR, cv2.TM_CCORR]:
-                    result = val / (max_val - min_val)
-                else:
-                    result = val
-            top_left = (top_left[0] + search_region[1], top_left[1] + search_region[0])
-            bottom_right = (top_left[0] + w, top_left[1] + h)
-            (startX, startY) = top_left
-            (endX, endY) = bottom_right
-
-            b = int(np.average(self.frame[startY:endY, startX:endX, 0]))
-            g = int(np.average(self.frame[startY:endY, startX:endX, 1]))
-            r = int(np.average(self.frame[startY:endY, startX:endX, 2]))
-
-            # r = np.average(self.frame[startX:endX, startY:endY, 0])
-            # g = np.average(self.frame[startX:endX, startY:endY, 1])
-            # b = np.average(self.frame[startX:endX, startY:endY, 2])
-
-            self.console.write(f"color avg RGB: {r}, {g}, {b}\n")
-            print(f"color avg RGB: {r}, {g}, {b}")
-            delta = compare_rgb((r, g, b),self.template_rgb)
-
-
-            self.console.write(f"color diff(space:{delta[0]:.2f}, (r,g,b):{delta[1:]} at loc: {top_left+bottom_right}\n")
-            if paint is True:
-                frame = self.frame.copy()
-            if result < threshold:
-               self.console.write(f"no template found!!!. result {result:.2f} < threshold  {threshold} ({min_val:.2f}, {max_val:.2f}) in region: {search_region}\n")
-               print(f"no template found!!!. result {result:.2f} < threshold  {threshold} ({min_val:.2f}, {max_val:.2f}) in region: {search_region}")
-               cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 0, 128), 5)
-            elif delta[0] > COLOR_DISTANCE_THRESHOLD:
-                self.console.write(
-                    f"detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
-                print(
-                    f"detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
-                self.console.write(f"template found but color doesnt match???. color space diff {delta[0]:.2f} > {COLOR_DISTANCE_THRESHOLD}\n")
-                print(f"template found but color doesnt match???. color space diff {delta[0]:.2f} > {COLOR_DISTANCE_THRESHOLD}")
-                cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 0, 128), 5)
-            elif sum(delta[1:]) > RGB_DIFFERENCE_THRESHOLD:
-                self.console.write(
-                    f"detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
-                print(
-                    f"detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
-                self.console.write(f"template found but color doesnt match???. color rgb diff {delta[1:]} > {RGB_DIFFERENCE_THRESHOLD}\n")
-                print(f"template found but color doesnt match???. color rgb diff {delta[1:]} > {RGB_DIFFERENCE_THRESHOLD}")
-                cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 128), 5)
-            else:
-                # check to see if the iteration should be visualized
-                # cv2.waitKey(0)
+        if match_result is None:
+            pass
+        else:
+            print(f"match_result(found, region, result, color):\n"
+              f"{match_result[0]}, ({match_result[1]}, {match_result[2]}), {match_result[3]:.2f}, "
+              f"({match_result[4][0]:.2f}, {match_result[4][1]:.2f}, {match_result[4][2]:.2f}, "
+                  f"{match_result[4][3]:.2f})")
+            self.console.write(f"match_result(found, region, result, color):\n"
+                          f"{match_result[0]}, ({match_result[1]}, {match_result[2]}), {match_result[3]:.2f}, "
+                          f"({match_result[4][0]:.2f}, {match_result[4][1]:.2f}, {match_result[4][2]:.2f}, "
+                               f"{match_result[4][3]:.2f})")
+        if match_result  is not None:
+            if match_result[0] is True:
                 if paint is True:
                     # draw a bounding box around the detected result and display the image
-                    cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 0), 5)
-                    self.console.write(f"found template result: {result:.2f} at {top_left+bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f} in region: {search_region}\n")
-                    print(f"found template result: {result:.2f} at {top_left+bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}) in region: {search_region}")
-                break
-            if max_tries > 1:
-                if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
-                    method  = cv2.TM_CCORR + method - cv2.TM_SQDIFF
-                elif method in [cv2.TM_CCORR, cv2.TM_CCORR_NORMED]:
-                    method  = cv2.TM_SQDIFF + method - cv2.TM_CCORR
-                elif method in [cv2.TM_CCOEFF, cv2.TM_CCOEFF_NORMED]:
-                    method  = cv2.TM_SQDIFF + method - cv2.TM_CCOEFF
-                self.console.write(f"try different method: {method} again\n")
+                    cv2.rectangle(img, match_result[1], match_result[2], (0, 128, 0), 5)
+            else:
+                if paint is True:
+                    if match_result[3] < threshold:
+                        # draw a bounding box around the detected result and display the image
+                        cv2.rectangle(img, match_result[1], match_result[2], (0, 0, 128), 5)
+                    else:
+                        if match_result[4][0] > COLOR_DISTANCE_THRESHOLD:
+                            # draw a bounding box around the detected result and display the image
+                            cv2.rectangle(img, match_result[1], match_result[2], (0, 0, 128), 5)
+                        elif sum(match_result[4][1:]) > RGB_DIFFERENCE_THRESHOLD:
+                            # draw a bounding box around the detected result and display the image
+                            cv2.rectangle(img, match_result[1], match_result[2], (0, 0, 128), 5)
 
         if paint is True:
-            self.image_item_page.setImage(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            self.image_item_page.setImage(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
             QtGui.QGuiApplication.processEvents()
+
+        return
 
 
 class Slider(QWidget):

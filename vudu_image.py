@@ -1,6 +1,6 @@
 # install color math:
 # sudo pip install colormath
-# reference, credits and acknolegement 
+# reference, credits and acknolegement
 # https://en.wikipedia.org/wiki/CIE_1931_color_space
 # http://hanzratech.in/2015/01/16/color-difference-between-2-colors-using-python.html
 # transformation
@@ -12,11 +12,10 @@ import numpy as np
 import pytesseract
 from cv2 import imwrite, cvtColor, COLOR_BGR2GRAY
 
-
-
 from colormath.color_objects import sRGBColor, LabColor
 from colormath.color_conversions import convert_color
 from colormath.color_diff import delta_e_cie2000
+
 
 # compare the difference of two colors
 # return a list of four floats,
@@ -25,41 +24,41 @@ from colormath.color_diff import delta_e_cie2000
 # 3.  difference of g1, g2 - cutoff
 # 4.  difference of b1, b2 - cutoff
 # cutoff = min(r,g,b)
-
-def compare_rgb(rgb1, rgb2):
-
-    space_diff = compare_distance(rgb1, rgb2)
-    m1 = min(rgb1) # cutoff is the min of three
+def comp_rgb(rgb1, rgb2):
+    space_diff = comp_color_distance(rgb1, rgb2)
+    m1 = min(rgb1)  # cutoff is the min of three
     m2 = min(rgb2)
-    delta_r = abs((rgb1[0]-m1) - (rgb2[0]-m2))
-    delta_g = abs((rgb1[1]-m1) - (rgb2[1]-m2))
-    delta_b = abs((rgb1[2]-m1) - (rgb2[2]-m2))
-    return (space_diff, delta_r, delta_g, delta_b)
+    delta_r = abs((rgb1[0] - m1) - (rgb2[0] - m2))
+    delta_g = abs((rgb1[1] - m1) - (rgb2[1] - m2))
+    delta_b = abs((rgb1[2] - m1) - (rgb2[2] - m2))
+    return space_diff, delta_r, delta_g, delta_b
 
-def compare_distance(rgb1, rgb2):
-    color1_rgb = sRGBColor(rgb1[0]/255, rgb1[1]/255, rgb1[2]/255);
-    color2_rgb = sRGBColor(rgb2[0]/255, rgb2[1]/255, rgb2[2]/255);
 
-    # Convert from RGB to Lab Color Space
-    color1_lab = convert_color(color1_rgb, LabColor);
+def comp_color_distance(rgb1, rgb2):
+    color1_rgb = sRGBColor(rgb1[0] / 255, rgb1[1] / 255, rgb1[2] / 255)
+    color2_rgb = sRGBColor(rgb2[0] / 255, rgb2[1] / 255, rgb2[2] / 255)
 
     # Convert from RGB to Lab Color Space
-    color2_lab = convert_color(color2_rgb, LabColor);
-    return delta_e_cie2000(color1_lab, color2_lab);
+    color1_lab = convert_color(color1_rgb, LabColor)
+
+    # Convert from RGB to Lab Color Space
+    color2_lab = convert_color(color2_rgb, LabColor)
+    return delta_e_cie2000(color1_lab, color2_lab)
+
 
 # match_parameter=(method, template_threshold, color distance_threhold, rgb_threshold)
 # method: -1 auto, others cv2.TM_CCOEFF, cv2.TM_CCOEFF_NORMED, cv2.TM_CCORR, cv2.TM_CCORR_NORMED, cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED
 # return (match, region, template difference, (color space delta, R delta, G delta, B delta))
 # match: True if found, False if not found
 # region: the location of found match. x, y, w and h
-def match(image, frame, region=None, match_parameter=(-1, 0.80,25.0,50.0)):
+def match(image, frame, region=None, match_parameter=(-1, 0.80, 25.0, 50.0)):
     h, w, d = image.shape[::]
     if region is None:
         search_region = list(0, 0, frame.shape[0], frame.shape[1])
     else:
-        search_region = (region[1], region[0], region[3], region[2]) # swap w, h
+        search_region = (region[1], region[0], region[3], region[2])  # swap w, h
 
-    if search_region[2]-search_region[0] < w or search_region[3] - search_region[1] < h:
+    if search_region[2] - search_region[0] < w or search_region[3] - search_region[1] < h:
         # self.console.write(f"error: search region < template size")
         print(f"error: search region < template size")
         return None
@@ -70,89 +69,72 @@ def match(image, frame, region=None, match_parameter=(-1, 0.80,25.0,50.0)):
         methods = [match_parameter[0]]
 
     for method in methods:
-            # Apply template Matching
-            res = cv2.matchTemplate(cvtColor(frame[search_region[0]:search_region[2],search_region[1]:search_region[3]], COLOR_BGR2GRAY), cvtColor(image, COLOR_BGR2GRAY), method)
-            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+        # Apply template Matching
+        res = cv2.matchTemplate(cvtColor(frame[search_region[0]:search_region[2], search_region[1]:search_region[3]],
+                                         COLOR_BGR2GRAY), cvtColor(image, COLOR_BGR2GRAY), method)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
 
-            '''
-            # get all the matches:
-            res2 = np.reshape(res, res.shape[0] * res.shape[1])
-            sort = np.argsort(res2)
-            (y1, x1) = np.unravel_index(sort[0], res.shape)  # best match
-            (y2, x2) = np.unravel_index(sort[1], res.shape)  # second best match
-            '''
+        '''
+        # get all the matches:
+        res2 = np.reshape(res, res.shape[0] * res.shape[1])
+        sort = np.argsort(res2)
+        (y1, x1) = np.unravel_index(sort[0], res.shape)  # best match
+        (y2, x2) = np.unravel_index(sort[1], res.shape)  # second best match
+        '''
 
-
-            # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
-            if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
-                top_left = min_loc
-                val = min_val
-                if max_val == min_val:
-                    result = 0.0
-                else:
-                    result = 1.0 - val / (max_val) # - min_val)
+        # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
+        if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
+            top_left = min_loc
+            val = min_val
+            if max_val == min_val:
+                result = 0.0
             else:
-                top_left = max_loc
-                val = max_val
-                if max_val == min_val:
-                    result = 0.0
-                elif method in [cv2.TM_CCOEFF, cv2.TM_CCOEFF_NORMED, cv2.TM_CCORR, cv2.TM_CCORR]:
-                    result = val / (max_val - min_val)
-                else:
-                    result = val
-            top_left = (top_left[0] + search_region[1], top_left[1] + search_region[0])
-            bottom_right = (top_left[0] + w, top_left[1] + h)
-            (startX, startY) = top_left
-            (endX, endY) = bottom_right
-
-            b = int(np.average(frame[startY:endY, startX:endX, 0]))
-            g = int(np.average(frame[startY:endY, startX:endX, 1]))
-            r = int(np.average(frame[startY:endY, startX:endX, 2]))
-            print(f"color avg RGB: {r}, {g}, {b}")
-
-            b1 = np.average(image[:, :, 0])
-            g1 = np.average(image[:, :, 1])
-            r1 = np.average(image[:, :, 2])
-
-            # self.console.write(f"color avg RGB: {r}, {g}, {b}\n")
-            print(f"color avg RGB: {r1}, {g1}, {b1}")
-            delta = compare_rgb((r, g, b), (r1, g1, b1))
-
-
-            #self.console.write(f"color diff(space:{delta[0]:.2f}, (r,g,b):{delta[1:]} at loc: {top_left+bottom_right}\n")
-            # if paint is True:
-            #     frame = self.frame.copy()
-            if result <  match_parameter[1]:
-               # self.console.write(f"no template found!!!. result {result:.2f} < threshold  {match_parameter[1]} ({min_val:.2f}, {max_val:.2f}) in region: {search_region}\n")
-               print(f"no template found!!!. result {result:.2f} < threshold  {match_parameter[1]} ({min_val:.2f}, {max_val:.2f}) in region: {search_region}")
-               # cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 0, 128), 5)
-            elif delta[0] > match_parameter[2]:
-                # self.console.write(
-                #    f"detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
-                print(
-                    f"detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
-                # self.console.write(f"template found but color doesnt match???. color space diff {delta[0]:.2f} > {match_parameter[2]}\n")
-                print(f"template found but color doesnt match???. color space diff {delta[0]:.2f} > {match_parameter[2]}")
-                # cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 0, 128), 5)
-            elif sum(delta[1:]) > match_parameter[3]:
-                # self.console.write(
-                #    f"detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
-                print(
-                    f"detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f}\n")
-                # self.console.write(f"template found but color doesnt match???. color rgb diff {delta[1:]} > {match_parameter[3]}\n")
-                print(f"template found but color doesnt match???. color rgb diff {delta[1:]} > {match_parameter[3]}")
-                # cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 128), 5)
+                result = 1.0 - val / max_val  # - min_val)
+        else:
+            top_left = max_loc
+            val = max_val
+            if max_val == min_val:
+                result = 0.0
+            elif method in [cv2.TM_CCOEFF, cv2.TM_CCOEFF_NORMED, cv2.TM_CCORR, cv2.TM_CCORR]:
+                result = val / (max_val - min_val)
             else:
-                # check to see if the iteration should be visualized
-                # cv2.waitKey(0)
-                # if paint is True:
-                #     # draw a bounding box around the detected result and display the image
-                #     cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 128, 0), 5)
-                # self.console.write(f"found template result: {result:.2f} at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), result: {result:.2f} in region: {search_region}\n")
-                print(f"found template result: {result:.2f} at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}) in region: {search_region}")
-                return (True, top_left, bottom_right, result, delta)
+                result = val
+        top_left = (top_left[0] + search_region[1], top_left[1] + search_region[0])
+        bottom_right = (top_left[0] + w, top_left[1] + h)
+        (startX, startY) = top_left
+        (endX, endY) = bottom_right
 
-            print (f"try different method again")
+        b = int(np.average(frame[startY:endY, startX:endX, 0]))
+        g = int(np.average(frame[startY:endY, startX:endX, 1]))
+        r = int(np.average(frame[startY:endY, startX:endX, 2]))
+        print(f"color avg RGB: {r}, {g}, {b}")
+
+        b1 = np.average(image[:, :, 0])
+        g1 = np.average(image[:, :, 1])
+        r1 = np.average(image[:, :, 2])
+
+        # self.console.write(f"color avg RGB: {r}, {g}, {b}\n")
+        print(f"color avg RGB: {r1}, {g1}, {b1}")
+        delta = comp_rgb((r, g, b), (r1, g1, b1))
+
+        if result < match_parameter[1]:
+            print(f"no template found!!!. result {result:.2f} < threshold  {match_parameter[1]} ({min_val:.2f}, "
+                  f"{max_val:.2f}) in region: {search_region}")
+        elif delta[0] > match_parameter[2]:
+
+            print(f"detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), "
+                  f"result: {result:.2f}\n")
+            print(f"template found but color doesnt match???. color space diff {delta[0]:.2f} > {match_parameter[2]}")
+        elif sum(delta[1:]) > match_parameter[3]:
+            print(f"detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), "
+                  f"result: {result:.2f}\n")
+            print(f"template found but color doesnt match???. color rgb diff {delta[1:]} > {match_parameter[3]}")
+        else:
+            print(
+                f"found template result: {result:.2f} at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}) in region: {search_region}")
+            return (True, top_left, bottom_right, result, delta)
+
+        print(f"try different method again")
 
     return (False, top_left, bottom_right, result, delta)
 
@@ -165,7 +147,7 @@ def match(image, frame, region=None, match_parameter=(-1, 0.80,25.0,50.0)):
 # threshold: valid vaule is in the range of 0 to 255
 # When a  color  < threshold, it is assigned as black, when color > then threshold is assigned as white
 # return -
-# top_left, top_right, bottom_left, bottom_right, width, height
+# top_left, top_right, bottom_left, bottom_right, deskewed width, deskewed height
 def search_corners(frame, threshold=10):
     # convert the image to grayscale, blur it, and find edges
     # in the image
@@ -208,7 +190,6 @@ def search_corners(frame, threshold=10):
         s = np.sum(pts, axis=1)
         tl = pts[np.argmin(s)]
         br = pts[np.argmax(s)]
-        
         # now, compute the difference between the points, the
         # top-right point will have the smallest difference,
         # whereas the bottom-left will have the largest difference
@@ -243,28 +224,44 @@ def search_corners(frame, threshold=10):
             [maxWidth - 1, 0],
             [maxWidth - 1, maxHeight - 1],
             [0, maxHeight - 1]], dtype="float32")
-        return tl,tr,bl,br,maxWidth,maxHeight
+        return tl, tr, bl, br, maxWidth, maxHeight
 
 
+# recognize text on the frame
+# region defines the area to process OCR
+# grayscale is True when you want to convert frame to grayscale before OCR
 def ocr(frame, region=None, grayscale=False):
     if region is not None:
-        _frame = frame[region[0]:region[2], dim[1]:dim[3]]
+        _frame = frame[region[1]:region[3], region[0]:region[2]]
     else:
-        _frame =  frame
-    if grayscale is Ture:
+        _frame = frame
+    if grayscale is True:
         _frame = cvtColor(_frame)
 
     text = pytesseract.image_to_string(_frame)
     return text
 
+
 if __name__ == "__main__":
 
     for c in range(255):
-        color1 = (128,128,128)
-        color2 = (c,c,c)
-        delta = compare_rgb(color1, color2)
+        color1 = (128, 128, 128)
+        color2 = (c, c, c)
+        delta = comp_rgb(color1, color2)
         print(f"color {color1}, {color2} = {delta}")
 
+    delta = comp_rgb((255, 0, 0), (0, 0, 255))
+    print("The difference between the 2 color = ", delta)
+    assert abs( sum(delta[1::]) - 510 )< 3.0, "comp_rgb failed"
 
-    delta = compare_rgb((255,0,0),(0,0,255))
-    print ("The difference between the 2 color = ", delta)
+    delta = comp_color_distance((255, 0, 0), (0, 0, 255))
+    print("The distance between the 2 color = ", delta)
+    assert abs(delta - 52.0) < 3.0, "comp_color_distance failed"
+
+    frame = cv2.imread("pages/Samsung/play_page_1.png")
+    region = ( 20, 20, 292, 84 )
+    result = ocr(frame, region)
+    print("The ocr result = ", result)
+    assert 'A Star Is Born' in result, "ocr failed"
+
+

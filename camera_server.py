@@ -2,7 +2,6 @@ import cv2
 # pip install opencv-python-headless
 # from goprocam import GoProCamera, constants
 # comment out goprocam, we are reading GoPro from HDMI to USB directly.
-import time
 # pip install flask
 # pip install flask_extension
 # pip install Flask_Session
@@ -19,10 +18,12 @@ import config
 app = Flask(__name__)
 print(f"__name__={__name__}")
 
+
 @app.route('/')
 @app.route('/index')
 def index():
     return "Hello, World -Universal capture platform!"
+
 
 def debug(str):
     print(str)
@@ -34,8 +35,9 @@ def debug(str):
 @app.route('/start_live/<address>')
 def start_live(address):
     debug(f"=== rest api:get_live {address} ===")
+
     ffmpeg = f"ffmpeg -f {config.INPUT_DEVICE} -framerate 30 -video_size 1280x720 -i '{config.CAMERA_ID}:none' -vcodec libx264 " \
-                 f"-preset ultrafast -tune zerolatency -pix_fmt yuv422p -f mpegts udp://{address}"
+              f"-preset ultrafast -tune zerolatency -pix_fmt yuv422p -f mpegts udp://{address}"
     # ffmpeg -f avfoundation -framerate 30 -video_size 1280x720 -i "0:none" -vcodec libx264 -preset ultrafast
     #        -tune zerolatency -pix_fmt yuv422p -f mpegts udp://192.168.8.3:12345
     # return_code = subprocess.run([ffmpeg], shell=True)
@@ -46,6 +48,7 @@ def start_live(address):
     debug(f"process: {process.pid}")
     debug(f"process: {session['ffmpeg_process']}")
     return "success"
+
 
 @app.route('/stop_live')
 def stop_live():
@@ -105,7 +108,7 @@ def _frame():
     #
     debug(f"return response ===")
     return response
-    #return "success"
+    # return "success"
 
 # curl --request get http://localhost:5000/ocr
 # return text using provided region params
@@ -144,6 +147,7 @@ def navigate():
     debug("=== rest_api:navigate ===")
     return "success"
 
+
 sess = Session()
 
 print("start routes")
@@ -157,5 +161,4 @@ app.debug = True
 print("start app")
 
 if __name__ == "__main__":
-    app.run(host= '0.0.0.0', port="33")
-
+    app.run(host='0.0.0.0', port="33")

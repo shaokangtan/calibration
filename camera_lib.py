@@ -3,7 +3,7 @@
 import requests
 # response = requests.get('https://google.com/')
 # print(f"google response: {response}")
-
+from helper import debug
 
 class Camera():
     def __init__(self, url=None):
@@ -22,17 +22,17 @@ class Camera():
         return r
 
     def free_camera(self):
-        print(f"=== free_camera ===")
+        debug(f"=== free_camera ===")
         if self.init is True:
             self.init = False
             self.url = None
         return 200
 
     def ping(self, url):
-        print(f"=== ping ===")
+        debug(f"=== ping ===")
         r = requests.get(url=f'{url}/', cookies=self.session_cookie)
         if r.status_code == 200:
-            print(f"cookies:{r.cookies}")
+            debug(f"cookies:{r.cookies}")
             if 'session' in r.cookies:
                 self.session_cookie = {'session': r.cookies['session']}
         # if r.status_code == 200:
@@ -41,11 +41,11 @@ class Camera():
             #         f.write(chunk)
         return r.status_code
 
-    def start_live(self, address):
-        print(f"=== start_live ===")
+    def start_live(self, address, timestamp=False, frame_rate=30):
+        debug(f"=== start_live ===")
         if self.init is False:
             return 404
-        r = requests.get(url=f'{self.url}/start_live/{address}', cookies=self.session_cookie)
+        r = requests.get(url=f'{self.url}/start_live/{address}/{ 1 if timestamp is True else 0 }/{frame_rate}', cookies=self.session_cookie)
         # if r.status_code == 200:
         # with open(path, 'wb') as f:
         #     for chunk in r.iter_content(1024):
@@ -53,7 +53,7 @@ class Camera():
         return r.status_code
 
     def stop_live(self):
-        print(f"=== stop_live ===")
+        debug(f"=== stop_live ===")
         if self.init is False:
             return 404
         r = requests.get(url=f'{self.url}/stop_live', cookies=self.session_cookie)
@@ -66,7 +66,7 @@ class Camera():
     def _frame(self, path=None):
         # example to read file
         # https://stackoverflow.com/questions/13137817/how-to-download-image-using-requests
-        print(f"=== _frame ===")
+        debug(f"=== _frame ===")
         if self.init is False:
             return 404
         r = requests.get(url=f'{self.url}/_frame', cookies=self.session_cookie)
@@ -78,7 +78,7 @@ class Camera():
         return r.status_code
 
     def get_frame(self, path=None):
-        print(f"=== get_frame ===")
+        debug(f"=== get_frame ===")
         if self.init is False:
             return 404
         r = requests.get(url=f'{self.url}/get_frame', cookies=self.session_cookie)
@@ -90,7 +90,7 @@ class Camera():
         return r.status_code
 
 #
-# print(f"=== test match ===")
+# debug(f"=== test match ===")
 # data = open('./images/test/playerBack.png', 'rb').read()
 # response = requests.post(url = 'http://localhost:5000/match', data=data,
 #                          headers={'Content-Type': 'application/octet-stream', 'Region': '0,0,1280,1080'})
@@ -117,26 +117,26 @@ if __name__ == "__main__":
     URL = 'http://0.0.0.0:33'
     cam = Camera()
     status = cam.allocate_camera(URL)
-    print(f"response: {status}")
+    debug(f"response: {status}")
 
     status = cam._frame(path='output/_frame.png')
-    print(f"response: {status}")
+    debug(f"response: {status}")
     assert 200 == status
 
     status = cam.get_frame(path='output/new_frame.png')
-    print(f"response: {status}")
+    debug(f"response: {status}")
     assert 200 == status
 
     status = cam.start_live('127.0.0.1:12345')
-    print(f"response: {status}")
+    debug(f"response: {status}")
     assert 200 == status
 
     status = cam.stop_live()
-    print(f"response: {status}")
+    debug(f"response: {status}")
     assert 200 == status
 
     status = cam.free_camera()
-    print(f"response: {status}")
+    debug(f"response: {status}")
     assert 200 == status
 
     # status, ret = match('./images/test/playerBack.png')

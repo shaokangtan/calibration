@@ -6,13 +6,14 @@ import cv2
 # pip install flask_extension
 # pip install Flask_Session
 # pip install Werkzeug == 0.15
-# pip install ffmpeg-python
+# brew install ffmpeg ffmpeg --with-freetype
 import os
 import signal
 import subprocess
 from flask import Flask, session, make_response
 from flask_session import Session
 import config
+from helper import debug
 
 
 app = Flask(__name__)
@@ -25,23 +26,29 @@ def index():
     return "Hello, World -Universal capture platform!"
 
 
-def debug(str):
-    print(str)
 
-# curl --request get http://localhost:5000/get_live
+# curl --request get http://localhost:5000/start_live
 # broadcast video to address
 # address = ip:port e.g. 192.168.8.3:12345
 # TBD: Add parameters to control w, h and rate
-@app.route('/start_live/<address>')
-def start_live(address):
-    debug(f"=== rest api:get_live {address} ===")
+@app.route('/start_live/<address>/<timestamp>/<frame_rate>')
+def start_live(address, timestamp, frame_rate):
+    debug(f"=== rest api:get_live at {address}, timestamp: {timestamp} ===")
+    if eval(timestamp) == 1:
+        ffmpeg = "ffmpeg -f {device} -framerate 30 -video_size 1280x720 -i '{camera}:none' -vcodec libx264 " \
+                 "-preset ultrafast -tune zerolatency -pix_fmt yuv422p " \
+                 "-vf drawtext=\"fontfile=/System/Library/Fonts/NewYork.ttf: text=\"{text}\": fontcolor=white: fontsize=36: x=(w-text_w)/2: y=(h-text_h)/2\" " \
+                 "-r {rate} -f mpegts udp://{addr}".format(device= config.INPUT_DEVICE, camera=config.CAMERA_ID, text="%\{gmtime\}", rate=frame_rate, addr=address)
+    else:
+        ffmpeg = "ffmpeg -f {device} -framerate 30 -video_size 1280x720 -i '{camera}:none' -vcodec libx264 " \
+                 "-preset ultrafast -tune zerolatency -pix_fmt yuv422p " \
+                 "-r {rate} -f mpegts udp://{addr}".format(device=config.INPUT_DEVICE, camera=config.CAMERA_ID, rate=frame_rate, addr=address)
 
-    ffmpeg = f"ffmpeg -f {config.INPUT_DEVICE} -framerate 30 -video_size 1280x720 -i '{config.CAMERA_ID}:none' -vcodec libx264 " \
-              f"-preset ultrafast -tune zerolatency -pix_fmt yuv422p -f mpegts udp://{address}"
-    # ffmpeg -f avfoundation -framerate 30 -video_size 1280x720 -i "0:none" -vcodec libx264 -preset ultrafast
+        # ffmpeg -f avfoundation -framerate 30 -video_size 1280x720 -i "0:none" -vcodec libx264 -preset ultrafast
     #        -tune zerolatency -pix_fmt yuv422p -f mpegts udp://192.168.8.3:12345
     # return_code = subprocess.run([ffmpeg], shell=True)
     # debug(f"=== subprocess.run return {return_code} ===")
+    debug(f"{ffmpeg}")
     process = subprocess.Popen(ffmpeg, shell=True)
     debug(f"=== subprocess.Popen return {process.pid} ===")
     session["ffmpeg_process"] = process.pid

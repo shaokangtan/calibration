@@ -2,6 +2,7 @@ import camera_lib
 import time
 import socket
 import subprocess
+from helper import debug
 
 if __name__ == "__main__":
    # URL is your camera URL including port
@@ -14,22 +15,31 @@ if __name__ == "__main__":
    assert  200 ==  cam._frame(path = 'output/_frame.png')
    hostname = socket.gethostname()
    IPAddr = socket.gethostbyname(hostname)
-   ffplay = 'ffplay udp://'+ IPAddr + ':33'
-   process = subprocess.Popen(ffplay, shell=True)
-   print (f"=== subprocess.Popen return {process.pid} ===")
-   assert  200 ==  cam.start_live(address = IPAddr + ':33')
-   time.sleep(10)
-   process.terminate()
-   assert  200 ==  cam.stop_live()
-   time.sleep(5)
+   debug(f"=== start ffplay ===")
    ffplay = 'ffplay udp://' + IPAddr + ':33'
    process = subprocess.Popen(ffplay, shell=True)
-   print(f"=== subprocess.Popen return {process.pid} ===")
-   assert  200 ==  cam.start_live(address = IPAddr + ':33')
+   debug(f"=== subprocess.Popen return {process.pid} ===")
+   time.sleep(5)
+
+   debug(f"=== start live ===")
+   assert  200 ==  cam.start_live(address=IPAddr + ':33',timestamp=True)
+   # get new frame while video is live
+   assert  200 ==  cam.get_frame(path = 'output/get_frame.png')
+
    time.sleep(10)
+   debug(f"=== stop ffplay  ===")
+
+   process.terminate()
+   debug(f"=== start ffplay again (to deplete the buffer)===")
+   ffplay = 'ffplay udp://' + IPAddr + ':33'
+   process = subprocess.Popen(ffplay, shell=True)
+   debug(f"=== subprocess.Popen return {process.pid} ===")
+
+   time.sleep(30)
+   process.terminate()
    assert  200 == cam.stop_live()
-   start = time.time()
-   for i in range(10):
-       assert  200 ==  cam.get_frame(path=f'output/_frame-{i}.png')
-   print (f"{(time.time()-start)/10} sec. per frame")
+   # start = time.time()
+   # for i in range(10):
+   #     assert  200 ==  cam.get_frame(path=f'output/_frame-{i}.png')
+   # debug (f"{(time.time()-start)/10} sec. per frame")
    status = cam.free_camera()

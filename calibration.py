@@ -22,7 +22,7 @@ import json
 import socket
 
 import time
-from vudu_image import comp_rgb, search_corners, match, ocr
+from vudu_image import comp_rgb, search_corners, match, ocr, init_deskew, run_deskew
 from camera_lib import Camera
 
 VERSION = "0.0.1"
@@ -63,6 +63,7 @@ class CalibrationView(QMainWindow):
 
         self.DEF_RC_URL = "http://192.168.8.19:33"
         self.DEF_STREAM_PORT = "1000"
+        self.DEF_STREAM_FRAME_RATE = "30"
         self.DEF_RC_FRAME_PATH = "_frame.png"
 
         self.blurring_types = ["Averaging 3x3", "Averaging 5x5", "Gaussian Filtering 3x3", "Gaussian Filtering 5x5",
@@ -252,17 +253,22 @@ class CalibrationView(QMainWindow):
         self.edit_rc_remote_camera_url = QLineEdit()
         self.edit_rc_remote_camera_url.setFixedWidth(150)
         self.edit_rc_remote_camera_url.setText(self.DEF_RC_URL)
-        self.label_rc_remote_camera_url = QLabel("camera url:")
+        self.label_rc_remote_camera_url = QLabel("Camera url:")
         self.edit_rc_stream_port = QLineEdit()
         self.edit_rc_stream_port.setFixedWidth(80)
         self.edit_rc_stream_port.setText(self.DEF_STREAM_PORT)
-        self.label_rc_stream_port = QLabel("stream port:")
+        self.label_rc_stream_port = QLabel("Stream port:")
+        self.edit_rc_stream_rate = QLineEdit()
+        self.edit_rc_stream_rate.setFixedWidth(80)
+        self.edit_rc_stream_rate.setText(self.DEF_STREAM_FRAME_RATE)
+        self.label_rc_stream_rate = QLabel("Stream frame rate:")
         self.btn_rc_get_frame = QPushButton('get frame')
         self.btn_rc_current_frame = QPushButton('current frame')
         self.btn_rc_start_video = QPushButton('start video')
         self.btn_rc_stop_video = QPushButton('stop video')
         self.btn_rc_alloc = QPushButton('alloc')
         self.btn_rc_free = QPushButton('free')
+        self.cb_add_timestamp = QCheckBox('Add timestamp to video')
 
         self.btn_rc_alloc.clicked.connect(self.on_btn_rc_alloc)
         self.btn_rc_free.clicked.connect(self.on_btn_rc_free)
@@ -284,6 +290,9 @@ class CalibrationView(QMainWindow):
         self.dk_remote.addWidget(self.btn_rc_get_frame, row=3, col=1)
         self.dk_remote.addWidget(self.btn_rc_start_video, row=3, col=2)
         self.dk_remote.addWidget(self.btn_rc_stop_video, row=3, col=3)
+        self.dk_remote.addWidget(self.label_rc_stream_rate, row=4, col=0)
+        self.dk_remote.addWidget(self.edit_rc_stream_rate, row=4, col=1)
+        self.dk_remote.addWidget(self.cb_add_timestamp, row=4, col=2)
 
 
         # general tab
@@ -774,7 +783,7 @@ class CalibrationView(QMainWindow):
         # load the image and compute the ratio of the old height
         # to the new height, clone it, and resize it
         threshold = 8
-        start = time.clock()
+        start = time.time()
         tl, tr, bl, br, width, height = search_corners(self.frame, threshold)
         image = self.frame.copy()  # cv2.imread('cards/red8.jpg')
         if tl is not None:
@@ -799,20 +808,22 @@ class CalibrationView(QMainWindow):
 
     def on_btn_deskew(self):
         img = self.frame
-        rows, cols, ch = img.shape
-        top_left = list(map(int, self.edit_deskew_top_left.text().split(',')))
-        top_right = list(map(int, self.edit_deskew_top_right.text().split(',')))
-        bot_left = list(map(int, self.edit_deskew_bot_left.text().split(',')))
-        bot_right = list(map(int, self.edit_deskew_bot_right.text().split(',')))
-        pts1 = np.float32([top_left, top_right, bot_left, bot_right])
-        width, height = list(map(int, self.edit_deskew_dim.text().split(',')))
-        pts2 = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
+        start = time.time()
         if self.PerspectiveTransform is None:
-            M = cv2.getPerspectiveTransform(pts1, pts2)
-            self.PerspectiveTransform = M
-        self.deskewed_frame = cv2.warpPerspective(img, self.PerspectiveTransform, (width, height))
+            rows, cols, ch = img.shape
+            top_left = list(map(int, self.edit_deskew_top_left.text().split(',')))
+            top_right = list(map(int, self.edit_deskew_top_right.text().split(',')))
+            bot_left = list(map(int, self.edit_deskew_bot_left.text().split(',')))
+            bot_right = list(map(int, self.edit_deskew_bot_right.text().split(',')))
+            pts1 = np.float32([top_left, top_right, bot_left, bot_right])
+            width, height = list(map(int, self.edit_deskew_dim.text().split(',')))
+            pts2 = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
+            self.PerspectiveTransform  = init_deskew(pts1, pts2)  # cv2.getPerspectiveTransform(pts1, pts2)
+        self.deskewed_frame = run_deskew(img, self.PerspectiveTransform) # cv2.warpPerspective(img, self.PerspectiveTransform, (width, height))
         self.image_item_page.setImage(cv2.cvtColor(self.deskewed_frame, cv2.COLOR_BGR2RGB))
         self.frame = self.deskewed_frame
+        # print(f"deskew spent {(time.time() - start)* 1000} ms")
+
 
     def on_btn_scale(self):
         img = self.frame
@@ -967,6 +978,7 @@ class CalibrationView(QMainWindow):
         # swap row and col
         # search_region[0], search_region[1], search_region[2], search_region[3], = search_region[1], search_region[0], \
         #                                                                           search_region[3], search_region[2]
+        start = time.time()
         if frame is not None:
             # img = frame
             img = frame.copy()
@@ -1037,6 +1049,7 @@ class CalibrationView(QMainWindow):
         if paint is True:
             self.image_item_page.setImage(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
             QtGui.QGuiApplication.processEvents()
+        print(f"match spent {(time.time() - start) * 1000} ms")
 
         return
 
@@ -1067,7 +1080,7 @@ class CalibrationView(QMainWindow):
         hostname = socket.gethostname()
         ip_addr = socket.gethostbyname(hostname)
         url = ip_addr + f':{port}'
-        assert 200 == self.remote_camera.start_live(address=url)
+        assert 200 == self.remote_camera.start_live(address=url, timestamp=self.cb_add_timestamp.isChecked(), frame_rate=self.edit_rc_stream_rate.text())
         self.cap = cv2.VideoCapture("udp://" +  url)
         if (self.cap.isOpened() is False):
             print("Error opening video stream or file")
@@ -1093,7 +1106,8 @@ class CalibrationView(QMainWindow):
                 print(f"{frames / (time.time() - start)} fp/s")
                 start = time.time()
                 frames = 0
-
+        if self.start_rc_streaming is True:
+            self.on_btn_rc_stop_video()
         print(f"{frames / (time.time() - start)} fp/s")
 
 

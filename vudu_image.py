@@ -226,6 +226,13 @@ def search_corners(frame, threshold=10):
             [0, maxHeight - 1]], dtype="float32")
         return tl, tr, bl, br, maxWidth, maxHeight
 
+def init_deskew(pts1, pts2):
+    M = cv2.getPerspectiveTransform(pts1, pts2)
+    return (M, pts2[3])
+
+
+def run_deskew(frame, perspective_transform_info):
+    return cv2.warpPerspective(frame, perspective_transform_info[0], tuple(perspective_transform_info[1]))
 
 # recognize text on the frame
 # region defines the area to process OCR

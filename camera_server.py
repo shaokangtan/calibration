@@ -13,7 +13,7 @@ import subprocess
 from flask import Flask, session, make_response
 from flask_session import Session
 import config
-from helper import debug
+from lib.helper import debug
 
 
 app = Flask(__name__)
@@ -23,6 +23,7 @@ print(f"__name__={__name__}")
 @app.route('/')
 @app.route('/index')
 def index():
+    debug(f"=== rest api:index ===")
     return "Hello, World -Universal capture platform!"
 
 
@@ -78,6 +79,22 @@ def get_frame():
 
     cap = cv2.VideoCapture(int(CAMERA_ID))
     ret, _frame = cap.read()
+    if _frame is None:
+        debug(f"Error: fail to get_frame, try again")
+        ret, _frame = cap.read()
+    if _frame is None:
+        debug(f"return response ===")
+        resp = make_response()
+        resp.status_code = 500
+        return resp
+
+        return response
+
+    debug(f"_frame shape: {_frame.shape}")
+    if _frame.shape[0] == 1080:
+        debug("resize _fraame to 1280 x 720")
+        _frame = cv2.resize(_frame, (1280, 720))
+
     session['frame'] = _frame
     cap.release()
     retval, buffer = cv2.imencode('.png', _frame)

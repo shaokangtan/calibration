@@ -51,12 +51,12 @@ def comp_color_distance(rgb1, rgb2):
 # return (match, region, template difference, (color space delta, R delta, G delta, B delta))
 # match: True if found, False if not found
 # region: the location of found match. x, y, w and h
-def match(image, frame, region=None, match_parameter=(-1, 0.80, 25.0, 50.0)):
+def match(frame, image, region=None, match_parameter=(-1, 0.80, 25.0, 50.0)):
     h, w, d = image.shape[::]
     if region is None:
         search_region = list(0, 0, frame.shape[0], frame.shape[1])
     else:
-        search_region = (region[1], region[0], region[3], region[2])  # swap w, h
+        search_region = (region.y, region.x, region.bottom, region.right)  # swap w, h
 
     if search_region[2] - search_region[0] < w or search_region[3] - search_region[1] < h:
         # self.console.write(f"error: search region < template size")
@@ -96,7 +96,10 @@ def match(image, frame, region=None, match_parameter=(-1, 0.80, 25.0, 50.0)):
             if max_val == min_val:
                 result = 0.0
             elif method in [cv2.TM_CCOEFF, cv2.TM_CCOEFF_NORMED, cv2.TM_CCORR, cv2.TM_CCORR]:
-                result = val / (max_val - min_val)
+                if min_val > 0:
+                    result = val / max_val
+                else:
+                    result = val / (max_val - min_val)
             else:
                 result = val
         top_left = (top_left[0] + search_region[1], top_left[1] + search_region[0])
@@ -132,11 +135,11 @@ def match(image, frame, region=None, match_parameter=(-1, 0.80, 25.0, 50.0)):
         else:
             print(
                 f"found template result: {result:.2f} at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}) in region: {search_region}")
-            return (True, top_left, bottom_right, result, delta)
+            return (True, Region(*top_left, *bottom_right), result, delta, method)
 
         print(f"try different method again")
 
-    return (False, top_left, bottom_right, result, delta)
+    return (False, Region(*top_left, *bottom_right), result, delta, method)
 
 
 # search_corners
@@ -239,7 +242,7 @@ def run_deskew(frame, perspective_transform_info):
 # grayscale is True when you want to convert frame to grayscale before OCR
 def ocr(frame, region=None, grayscale=False):
     if region is not None:
-        _frame = frame[region[1]:region[3], region[0]:region[2]]
+        _frame = frame[region.y:region.bottom, region.x:region.right]
     else:
         _frame = frame
     if grayscale is True:
@@ -248,6 +251,65 @@ def ocr(frame, region=None, grayscale=False):
     text = pytesseract.image_to_string(_frame)
     return text
 
+
+class Region():
+    def __init__(self, x, y, right, bottom):
+        self._x = x
+        self._y = y
+        self._right = right
+        self._bottom = bottom
+
+
+    @property
+    def x(self):
+        return self._x
+
+    @x.setter
+    def x(self, value):
+        self._x = value
+
+    @property
+    def top(self):
+        return self._y
+
+    @property
+    def y(self):
+        return self._y
+
+    @y.setter
+    def y(self, value):
+        self._y = value
+
+    @property
+    def left(self):
+        return self._y
+
+    @property
+    def w(self):
+        return self._right - self._x
+
+    @property
+    def right(self):
+        return self._right
+
+    @right.setter
+    def right(self, value):
+        self._right = value
+
+    @property
+    def h(self):
+        return self._bottom - self._x
+
+    @property
+    def bottom(self):
+        return self._bottom
+
+    @bottom.setter
+    def bottom (self, value):
+        self._bottom = value
+
+    def __str__(self):
+        return f"{self.x}, {self.y}, {self.right}, {self.bottom}"
 
 if __name__ == "__main__":
 

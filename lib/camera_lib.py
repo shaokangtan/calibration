@@ -3,7 +3,7 @@
 import requests
 # response = requests.get('https://google.com/')
 # print(f"google response: {response}")
-from helper import debug
+from lib.helper import debug
 
 class Camera():
     def __init__(self, url=None):
@@ -14,7 +14,7 @@ class Camera():
             self.allocate_camera(url)
 
     def allocate_camera(self, url):
-        print(f"=== init_camera ===")
+        debug(f"=== init_camera ===")
         r = self.ping(url)
         if r == 200:
             self.init = True

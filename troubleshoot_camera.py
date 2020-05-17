@@ -1,8 +1,8 @@
-import camera_lib
+from lib import camera_lib
 import time
 import socket
 import subprocess
-from helper import debug
+from lib.helper import debug
 
 if __name__ == "__main__":
    # URL is your camera URL including port

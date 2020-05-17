@@ -1,7 +1,6 @@
 import sys
 import cv2
 import pyqtgraph as pg
-import pyqtgraph.exporters
 from numpy import asarray
 from pyqtgraph.dockarea import DockArea
 from pyqtgraph.dockarea.DockArea import Dock
@@ -22,8 +21,9 @@ import json
 import socket
 
 import time
-from vudu_image import comp_rgb, search_corners, match, ocr, init_deskew, run_deskew
-from camera_lib import Camera
+from lib.vudu_image import comp_rgb, search_corners, match, ocr, init_deskew, run_deskew, Region
+from lib.camera_lib import Camera
+from lib.helper import debug
 
 VERSION = "0.0.1"
 
@@ -56,9 +56,10 @@ class CalibrationView(QMainWindow):
         self.DEF_SCREEN_DIM = "1920,1080"
         self.DEF_SCALE_DIM = "1280,720"
         self.DEF_TEMPLATE_SEARCH_REGION = "0, 0, -1,-1"
-        self.TEMPLATE_MATCH_METHODS = ['cv2.TM_CCOEFF', 'cv2.TM_CCOEFF_NORMED',
+        self.TEMPLATE_MATCH_METHODS = ['cv2.TM_SQDIFF', 'cv2.TM_SQDIFF_NORMED',
                                        'cv2.TM_CCORR', 'cv2.TM_CCORR_NORMED',
-                                       'cv2.TM_SQDIFF', 'cv2.TM_SQDIFF_NORMED']
+                                       'cv2.TM_CCOEFF', 'cv2.TM_CCOEFF_NORMED'
+                                       ]
         self.DEF_TEMPLATE_SEARCH_METHOD = 'cv2.TM_CCORR_NORMED'
 
         self.DEF_RC_URL = "http://192.168.8.19:33"
@@ -269,6 +270,7 @@ class CalibrationView(QMainWindow):
         self.btn_rc_alloc = QPushButton('alloc')
         self.btn_rc_free = QPushButton('free')
         self.cb_add_timestamp = QCheckBox('Add timestamp to video')
+        self.btn_save_frame = QPushButton('save frame')
 
         self.btn_rc_alloc.clicked.connect(self.on_btn_rc_alloc)
         self.btn_rc_free.clicked.connect(self.on_btn_rc_free)
@@ -276,6 +278,7 @@ class CalibrationView(QMainWindow):
         self.btn_rc_get_frame.clicked.connect(self.on_btn_rc_get_frame)
         self.btn_rc_start_video.clicked.connect(self.on_btn_rc_start_video)
         self.btn_rc_stop_video.clicked.connect(self.on_btn_rc_stop_video)
+        self.btn_save_frame.clicked.connect(self.on_btn_save_frame)
 
 
         # remote camera layout
@@ -293,6 +296,7 @@ class CalibrationView(QMainWindow):
         self.dk_remote.addWidget(self.label_rc_stream_rate, row=4, col=0)
         self.dk_remote.addWidget(self.edit_rc_stream_rate, row=4, col=1)
         self.dk_remote.addWidget(self.cb_add_timestamp, row=4, col=2)
+        self.dk_remote.addWidget(self.btn_save_frame, row=4, col=3)
 
 
         # general tab
@@ -438,7 +442,6 @@ class CalibrationView(QMainWindow):
 
     def streaming(self, camera="0"):
         import cv2
-        import numpy as np
         # from goprocam import GoProCamera
         # from goprocam import constants
         # cascPath = "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml"
@@ -679,9 +682,9 @@ class CalibrationView(QMainWindow):
     def on_btn_ocr_roi(self):
         assert self.frame is not None
         # im = Image.open(self.cb_page.currentText())
-        region = (int(self.rect_roi.pos()[0]), int(self.rect_roi.pos()[1]),
-                  int(self.rect_roi.pos()[0]) + int(self.rect_roi.size()[0]),
-                  int(self.rect_roi.pos()[1]) + int(self.rect_roi.size()[1]))
+        region = Region(int(self.rect_roi.pos()[0]), int(self.rect_roi.pos()[1]),
+                        int(self.rect_roi.pos()[0]) + int(self.rect_roi.size()[0]),
+                        int(self.rect_roi.pos()[1]) + int(self.rect_roi.size()[1]))
         # region = im.crop(dim)
         start = time.time()
         text = ocr(self.frame, region)
@@ -839,6 +842,11 @@ class CalibrationView(QMainWindow):
         name = "{}_scaled_{}x{}.png".format(basename, scale_dim[0], scale_dim[1])
         cv2.imwrite(name, self.scaled_frame)
         self.console.write(f"scaled screen saved as: {name}  \n")
+
+    def on_btn_save_frame(self):
+        name = f"_frame_{time.time()}.png"
+        cv2.imwrite(name, self.frame)
+        self.console.write(f"frame saved as: {name}  \n")
 
     def on_btn_save_denoised_screen(self):
         denoise_type = self.cb_image_blurring.currentText()
@@ -1013,38 +1021,38 @@ class CalibrationView(QMainWindow):
             match_method = -1
         else:
             match_method = method
-        match_result = match(template, img, search_region, match_parameter=(match_method, threshold,
+        match_result = match(img, template, Region(search_region[0], search_region[1], search_region[2], search_region[3]), match_parameter=(match_method, threshold,
                                                                             COLOR_DISTANCE_THRESHOLD,
                                                                             RGB_DIFFERENCE_THRESHOLD))
 
         if match_result is None:
             pass
         else:
-            print(f"match_result(found, region, result, color):\n"
-                  f"{match_result[0]}, ({match_result[1]}, {match_result[2]}), {match_result[3]:.2f}, "
-                  f"({match_result[4][0]:.2f}, {match_result[4][1]:.2f}, {match_result[4][2]:.2f}, "
-                  f"{match_result[4][3]:.2f})")
-            self.console.write(f"match_result(found, region, result, color):\n"
-                               f"{match_result[0]}, ({match_result[1]}, {match_result[2]}), {match_result[3]:.2f}, "
-                               f"({match_result[4][0]:.2f}, {match_result[4][1]:.2f}, {match_result[4][2]:.2f}, "
-                               f"{match_result[4][3]:.2f})")
+            print(f"match_result(found, method, region, result, color):\n"
+                  f"{match_result[0]}, {match_result[4]},  ({match_result[1]}), {match_result[2]:.2f}, "
+                  f"({match_result[3][0]:.2f}, {match_result[3][1]:.2f}, {match_result[3][2]:.2f}, "
+                  f"{match_result[3][3]:.2f})")
+            self.console.write(f"match_result(found, method, region, result, color):\n"
+                  f"{match_result[0]}, {match_result[4]},  ({match_result[1]}), {match_result[2]:.2f}, "
+                  f"({match_result[3][0]:.2f}, {match_result[3][1]:.2f}, {match_result[3][2]:.2f}, "
+                  f"{match_result[3][3]:.2f})")
         if match_result is not None:
             if match_result[0] is True:
                 if paint is True:
                     # draw a bounding box around the detected result and display the image
-                    cv2.rectangle(img, match_result[1], match_result[2], (0, 128, 0), 5)
+                    cv2.rectangle(img, (match_result[1].x, match_result[1].y), (match_result[1].right, match_result[1].bottom), (0, 128, 0), 5)
             else:
                 if paint is True:
-                    if match_result[3] < threshold:
+                    if match_result[2] < threshold:
                         # draw a bounding box around the detected result and display the image
-                        cv2.rectangle(img, match_result[1], match_result[2], (0, 0, 128), 5)
+                        cv2.rectangle(img, (match_result[1].x, match_result[1].y), (match_result[1].right, match_result[1].bottom),  (0, 0, 128), 5)
                     else:
-                        if match_result[4][0] > COLOR_DISTANCE_THRESHOLD:
+                        if match_result[3][0] > COLOR_DISTANCE_THRESHOLD:
                             # draw a bounding box around the detected result and display the image
-                            cv2.rectangle(img, match_result[1], match_result[2], (0, 0, 128), 5)
-                        elif sum(match_result[4][1:]) > RGB_DIFFERENCE_THRESHOLD:
+                            cv2.rectangle(img, (match_result[1].x, match_result[1].y), (match_result[1].right, match_result[1].bottom), (0, 0, 128), 5)
+                        elif sum(match_result[3][1:]) > RGB_DIFFERENCE_THRESHOLD:
                             # draw a bounding box around the detected result and display the image
-                            cv2.rectangle(img, match_result[1], match_result[2], (0, 0, 128), 5)
+                            cv2.rectangle(img, (match_result[1].x, match_result[1].y), (match_result[1].right, match_result[1].bottom), (0, 0, 128), 5)
 
         if paint is True:
             self.image_item_page.setImage(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
@@ -1081,16 +1089,24 @@ class CalibrationView(QMainWindow):
         ip_addr = socket.gethostbyname(hostname)
         url = ip_addr + f':{port}'
         assert 200 == self.remote_camera.start_live(address=url, timestamp=self.cb_add_timestamp.isChecked(), frame_rate=self.edit_rc_stream_rate.text())
+        time.sleep(5)
         self.cap = cv2.VideoCapture("udp://" +  url)
         if (self.cap.isOpened() is False):
-            print("Error opening video stream or file")
+            print("Error: opening video stream or file")
+            self.console.write("Error: opening video stream or file")
+            self.on_btn_rc_stop_video()
+            return
+        else:
+            print("Success: opening video stream or file")
+            self.console.write("Success: opening video stream or file")
         apply_deskewed_screen = self.cb_apply_deskewed_screen.isChecked()
         if apply_deskewed_screen is True:
             self.PerspectiveTransform = None
         start = time.time()
         frames = 0
         self.start_rc_streaming = True
-        while self.cap.isOpened() and self.start_rc_streaming is True:
+
+        while self.start_rc_streaming is True:
             ret, self.frame = self.cap.read()
             if ret is True:
                 frames += 1
@@ -1100,6 +1116,8 @@ class CalibrationView(QMainWindow):
                     self.image_item_page.setImage(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB))
             # Break the loop
             else:
+                debug("Error: reading video stream or file")
+                self.console.write("Error: reading video stream or file")
                 break
             QtGui.QGuiApplication.processEvents()
             if time.time() > start + 10:
@@ -1107,6 +1125,7 @@ class CalibrationView(QMainWindow):
                 start = time.time()
                 frames = 0
         if self.start_rc_streaming is True:
+            debug("error: fail to open cap")
             self.on_btn_rc_stop_video()
         print(f"{frames / (time.time() - start)} fp/s")
 
@@ -1204,7 +1223,7 @@ if __name__ == '__main__':
                     print("read {}".format(line))
                     pages += glob.glob(line)
     except Exception as e:
-        print("error: fail to open {}. {} ".format(page_file, e))
+        debug("error: fail to open {}. {} ".format(page_file, e))
         exit(2)
     if page_file is not None and len(pages) == 0:
         print("error: no page found in {}".format(page_file))

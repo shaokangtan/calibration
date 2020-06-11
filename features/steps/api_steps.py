@@ -14,6 +14,7 @@ def step_impl(context, url):
     cam = camera_lib.Camera()
     assert 200 == cam.allocate_camera(url), "alloc camera fail"
     context.cam = cam
+    context.frame_no = 0
 
 
 @step('I save a frame as "{file}"')

@@ -13,7 +13,7 @@ import subprocess
 from flask import Flask, session, make_response
 from flask_session import Session
 import config
-from lib.helper import debug
+from lib.util import debug
 
 
 app = Flask(__name__)

@@ -3,7 +3,8 @@
 import requests
 # response = requests.get('https://google.com/')
 # print(f"google response: {response}")
-from lib.helper import debug
+from lib.util import debug
+
 
 class Camera():
     def __init__(self, url=None):
@@ -78,7 +79,7 @@ class Camera():
         return r.status_code
 
     def get_frame(self, path=None):
-        debug(f"=== get_frame ===")
+        debug(f"=== get_frame {path} ===")
         if self.init is False:
             return 404
         r = requests.get(url=f'{self.url}/get_frame', cookies=self.session_cookie)

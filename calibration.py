@@ -23,7 +23,7 @@ import socket
 import time
 from lib.vudu_image import comp_rgb, search_corners, match, ocr, init_deskew, run_deskew, Region
 from lib.camera_lib import Camera
-from lib.helper import debug
+from lib.util import debug
 
 VERSION = "0.0.1"
 
@@ -62,7 +62,8 @@ class CalibrationView(QMainWindow):
                                        ]
         self.DEF_TEMPLATE_SEARCH_METHOD = 'cv2.TM_CCORR_NORMED'
 
-        self.DEF_RC_URL = "http://192.168.8.19:33"
+        # self.DEF_RC_URL = "http://192.168.8.19:33" # remote
+        self.DEF_RC_URL = "http://0.0.0.0:33"  # local
         self.DEF_STREAM_PORT = "1000"
         self.DEF_STREAM_FRAME_RATE = "30"
         self.DEF_RC_FRAME_PATH = "_frame.png"
@@ -1002,10 +1003,10 @@ class CalibrationView(QMainWindow):
             search_region[2] = img.shape[1]
         if search_region[3] < 0:
             search_region[3] = img.shape[0]
-        if search_region[2] > img.shape[1]:
+        if search_region[2] - search_region[0] > img.shape[1]:
             self.console.output(f"template search region: {search_region} > image size: {img.shape}\n")
             search_region[2] = img.shape[1]
-        if search_region[3] > img.shape[0]:
+        if search_region[3]  - search_region[1] > img.shape[0]:
             self.console.output(f"template search region: {search_region} > image size: {img.shape}\n")
             search_region[3] = img.shape[0]
         method = eval(self.cb_template_search_methods.currentText())

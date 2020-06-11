@@ -45,29 +45,46 @@ def comp_color_distance(rgb1, rgb2):
     color2_lab = convert_color(color2_rgb, LabColor)
     return delta_e_cie2000(color1_lab, color2_lab)
 
+default_match_parameter =(-1, 0.80, 25.0, 50.0)
 
-# match_parameter=(method, template_threshold, color distance_threhold, rgb_threshold)
+def set_default_match_paramter(match_paramter):
+    global default_match_parameter
+    default_match_parameter = match_paramter
+
+def get_default_match_parameter():
+    return default_match_parameter
+
+
+# MATCH_PARAMETER=(method, template_threshold, color distance_threhold, rgb_threshold)
 # method: -1 auto, others cv2.TM_CCOEFF, cv2.TM_CCOEFF_NORMED, cv2.TM_CCORR, cv2.TM_CCORR_NORMED, cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED
 # return (match, region, template difference, (color space delta, R delta, G delta, B delta))
 # match: True if found, False if not found
 # region: the location of found match. x, y, w and h
-def match(frame, image, region=None, match_parameter=(-1, 0.80, 25.0, 50.0)):
+def match(frame, image, region=None, match_parameter=None):
+    if match_parameter is None:
+        match_parameter=get_default_match_parameter()
+
+    if type(frame) is str:
+        print(f"match source: {frame}, ", end="")
+        frame = cv2.imread(frame)
+    if type(image) is str:
+        print(f"match target: {image}, ", end="")
+        image = cv2.imread(image)
+    print(f"match region: {region}, match param: {match_parameter}")
     h, w, d = image.shape[::]
     if region is None:
-        search_region = list(0, 0, frame.shape[0], frame.shape[1])
+        search_region = (0, 0, frame.shape[0], frame.shape[1])
     else:
         search_region = (region.y, region.x, region.bottom, region.right)  # swap w, h
-
-    if search_region[2] - search_region[0] < w or search_region[3] - search_region[1] < h:
+    if search_region[2] - search_region[0] < h or search_region[3] - search_region[1] < w:
         # self.console.write(f"error: search region < template size")
-        print(f"error: search region < template size")
+        print(f"error: search region{region} < template size {w} * {h}")
         return None
 
     if match_parameter[0] == -1:
         methods = [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED, cv2.TM_CCORR, cv2.TM_CCORR_NORMED]
     else:
         methods = [match_parameter[0]]
-
     for method in methods:
         # Apply template Matching
         res = cv2.matchTemplate(cvtColor(frame[search_region[0]:search_region[2], search_region[1]:search_region[3]],
@@ -110,21 +127,20 @@ def match(frame, image, region=None, match_parameter=(-1, 0.80, 25.0, 50.0)):
         b = int(np.average(frame[startY:endY, startX:endX, 0]))
         g = int(np.average(frame[startY:endY, startX:endX, 1]))
         r = int(np.average(frame[startY:endY, startX:endX, 2]))
-        print(f"color avg RGB: {r}, {g}, {b}")
+        print(f"method: {method}, frame color avg RGB: {r}, {g}, {b}, ", end="")
 
-        b1 = np.average(image[:, :, 0])
-        g1 = np.average(image[:, :, 1])
-        r1 = np.average(image[:, :, 2])
+        b1 = int(np.average(image[:, :, 0]))
+        g1 = int(np.average(image[:, :, 1]))
+        r1 = int(np.average(image[:, :, 2]))
 
         # self.console.write(f"color avg RGB: {r}, {g}, {b}\n")
-        print(f"color avg RGB: {r1}, {g1}, {b1}")
+        print(f"image color avg RGB: {r1}, {g1}, {b1}")
         delta = comp_rgb((r, g, b), (r1, g1, b1))
 
         if result < match_parameter[1]:
-            print(f"no template found!!!. result {result:.2f} < threshold  {match_parameter[1]} ({min_val:.2f}, "
-                  f"{max_val:.2f}) in region: {search_region}")
+            print(f"no template found!!!. result {result:.2f} at {top_left}, {bottom_right} < threshold {match_parameter[1]} ({min_val:.2f}, "
+                  f"{max_val:.2f}) in region: {region}")
         elif delta[0] > match_parameter[2]:
-
             print(f"detect at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}), "
                   f"result: {result:.2f}\n")
             print(f"template found but color doesnt match???. color space diff {delta[0]:.2f} > {match_parameter[2]}")
@@ -134,10 +150,11 @@ def match(frame, image, region=None, match_parameter=(-1, 0.80, 25.0, 50.0)):
             print(f"template found but color doesnt match???. color rgb diff {delta[1:]} > {match_parameter[3]}")
         else:
             print(
-                f"found template result: {result:.2f} at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}) in region: {search_region}")
+                f"found template result: {result:.2f} at {top_left}, {bottom_right}, val: {val:.2f}({min_val:.2f}, {max_val:.2f}) in region: {region}")
             return (True, Region(*top_left, *bottom_right), result, delta, method)
 
-        print(f"try different method again")
+        if len(methods) > 1:
+            print(f"try different method again")
 
     return (False, Region(*top_left, *bottom_right), result, delta, method)
 
@@ -240,16 +257,34 @@ def run_deskew(frame, perspective_transform_info):
 # recognize text on the frame
 # region defines the area to process OCR
 # grayscale is True when you want to convert frame to grayscale before OCR
-def ocr(frame, region=None, grayscale=False):
+def ocr(frame, region=None, grayscale=False, invert_grayscale=False, ocr_parameter=None):
     if region is not None:
         _frame = frame[region.y:region.bottom, region.x:region.right]
     else:
         _frame = frame
     if grayscale is True:
-        _frame = cvtColor(_frame)
+        _frame = cvtColor(_frame, cv2.COLOR_BGR2GRAY)
+        if invert_grayscale:
+            _frame = 255-_frame[:,:]
 
-    text = pytesseract.image_to_string(_frame)
+    if ocr_parameter:
+        text = pytesseract.image_to_string(_frame, config=ocr_parameter)
+    else:
+        text = pytesseract.image_to_string(_frame)
+    print(f"ocr return {text} at region: {region if region is not None else 'all'}")
     return text
+
+def image_diff(image1, image2):
+    noise_threshold = 20
+    frame1 = cvtColor(cv2.imread(image1), cv2.COLOR_BGR2GRAY)
+    frame2 = cvtColor(cv2.imread(image2), cv2.COLOR_BGR2GRAY)
+    if frame1.shape[0] != frame2.shape[0] or frame1.shape[1] != frame2.shape[1]:
+        return 100
+    frame3 = cv2.subtract(frame1, frame2)
+    # a0 = np.sum(frame3, 0)
+    # a1 = np.sum(a0,0)
+    different_pixels = (frame3[:,:] > noise_threshold ).sum()
+    return int(different_pixels / (frame1.shape[0] * frame1.shape[1]) * 100)
 
 
 class Region():
@@ -282,7 +317,7 @@ class Region():
 
     @property
     def left(self):
-        return self._y
+        return self._x
 
     @property
     def w(self):
@@ -310,6 +345,35 @@ class Region():
 
     def __str__(self):
         return f"{self.x}, {self.y}, {self.right}, {self.bottom}"
+
+    @staticmethod
+    def intersect(region1, region2):
+        if region1.x <= region2.x and region2.x <= region1.right:
+            if region1.y <= region2.y and region2.y <= region1.bottom:
+                return True
+            if region1.y <= region2.bottom and region2.bottom <= region1.bottom:
+                return True
+        if region2.x <= region1.x and region1.x <= region2.right:
+            if region2.y <= region1.y and region2.y <= region2.bottom:
+                return True
+            if region2.y <= region1.bottom and region1.bottom <= region2.bottom:
+                return True
+
+        return False
+
+    @staticmethod
+    def intersect_area(region1, region2):
+        #print(f"region 1: {region1.left}{region1.top}{region1.right}{region1.bottom}")
+        #print(f"region2: {region1.left}{region1.top}{region1.right}{region1.bottom}")
+        left = max(region1.left, region2.left)
+        right = min(region1.right, region2.right)
+        bottom = min(region1.bottom, region2.bottom)
+        top = max(region1.top, region2.top)
+        if left < right and bottom > top:
+            return (right - left) * (bottom - top)
+        else:
+            return 0
+
 
 if __name__ == "__main__":
 

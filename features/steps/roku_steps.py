@@ -3,25 +3,30 @@ import requests
 import xml.etree.ElementTree as ET
 import time
 from lib import keys
+from lib.vudu_image import set_default_match_paramter
+DEFAULT_MATCH_PARAMETER=(-1, 0.80, 25.0, 50.0)
+MATCH_PARAMETER=(3, 0.70, 50.0, 200.0)
+
 
 @step('I have a Roku "{roku_url}" with "{vudu}" app installed')
 def step_impl(context, roku_url, vudu):
     url = 'http://' + roku_url
     #curl http://192.168.8.32:8060/query/apps
     cmd = url + "/query/apps"
-    print(f"get {cmd}")
     r = requests.get(cmd)
+    print(f"Roku: get {cmd}, response: {r.status_code}")
+    assert 200 == r.status_code
     # print(f"response:{r.text}")
     context.url=url
     # find vudu app
     root = ET.fromstring(r.text)
     for child in root:
-        # print(child.tag, child.attrib)
-        if 'VUDU' == child.text:
-            print(f"appid={child.attrib['id']}")
+        print(child.tag, child.attrib)
+        if vudu == child.text:
             context.vudu_app_id = child.attrib['id']
-            print(f"{vudu} app id:{context.vudu_app_id}")
+            print(f"Roku: {vudu} app id:{context.vudu_app_id}\n\n")
             return
+    assert False, "fail to find {vudu} on Roku"
 
 
 @step('I select Roku home button')
@@ -31,11 +36,15 @@ def step_impl(context):
 
 @step('I launch Vudu apps')
 def step_impl(context):
+    launch_vudu(context)
+
+def launch_vudu(context):
     cmd = context.url + "/launch/" + context.vudu_app_id
-    print(f"get {cmd}")
     r = requests.post(cmd)
-    print(r.status_code)
-    time.sleep(10)
+    print(f"Roku: post {cmd}, response: {r.status_code}\n\n")
+    assert 200 == r.status_code or 204 == r.status_code
+    time.sleep(5)
+    set_default_match_paramter(MATCH_PARAMETER)
 
 
 roku_keys = { keys.KEY_HOME:"Home",
@@ -65,13 +74,12 @@ def step_impl(context):
     press(context, keys.KEY_REWIND)
 
 
-def press(context, key):
-    assert key in roku_keys, "error: illegal key"
+def press(context, key, delay=3):
+    assert key in roku_keys, f"error: {key} is not a valid key"
     cmd = context.url + "/keypress/" + roku_keys[key]
-    print(f"get {cmd}")
     r = requests.post(cmd)
-    print(r.status_code)
-    time.sleep(3)
+    print(f"Roku: get {cmd}, response: {r.status_code}, delay:{delay}")
+    time.sleep(delay)
 
 
 def goto_vudu_home(context):
@@ -80,7 +88,6 @@ def goto_vudu_home(context):
 
 def goto_roku_home(context):
     cmd = context.url + "/keypress/home"
-    print(f"get {cmd}")
     r = requests.post(cmd)
-    print(r.status_code)
+    print(f"Roku: get {cmd}, response: {r.status_code}")
     time.sleep(5)

@@ -6,11 +6,11 @@ import subprocess
 import os
 import cv2
 from lib.helper import Region, debug
+import config
 
-
-@step('I have a camera "{url}"')
-def step_impl(context, url):
-    url = 'http://' + url
+@step('I have a camera')
+def step_impl(context):
+    url = 'http://' + config.CAMERA_IP
     cam = camera_lib.Camera()
     assert 200 == cam.allocate_camera(url), "alloc camera fail"
     context.cam = cam

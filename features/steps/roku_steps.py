@@ -6,11 +6,11 @@ from lib import keys
 from lib.vudu_image import set_default_match_paramter
 DEFAULT_MATCH_PARAMETER=(-1, 0.80, 25.0, 50.0)
 MATCH_PARAMETER=(3, 0.70, 50.0, 200.0)
+import config
 
-
-@step('I have a Roku "{roku_url}" with "{vudu}" app installed')
-def step_impl(context, roku_url, vudu):
-    url = 'http://' + roku_url
+@step('I have a Roku with "{vudu}" app installed')
+def step_impl(context, vudu):
+    url = 'http://' + config.ROKU_IP
     #curl http://192.168.8.32:8060/query/apps
     cmd = url + "/query/apps"
     r = requests.get(cmd)

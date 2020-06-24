@@ -2,8 +2,8 @@ Feature: menu page navigation
 
 @i_am_already_on_menu
   Scenario Outline: Check out I am already on the menu page
-    Given I have a camera "<url>"
-    And I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    And I have a Roku with "<vudu>" app installed
     And I am already on the home menu page
     Then I can verify "Spotlight" selection on the menu page
     Examples:
@@ -13,21 +13,21 @@ Feature: menu page navigation
 
 @spotlight
   Scenario Outline: Check out the menu page
-    Given I have a camera "<url>"
-    And I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    And I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I go to home page
     Then I can verify "Spotlight" selection on the menu page
     And I can verify all navigation bar tabs visible on the menu page
     Examples:
-      | url   | roku_url  | vudu |
-      | 0.0.0.0:33 | 192.168.8.32:8060 | VUDU |
+      | vudu |
+      | VUDU |
 
 @my_vudu
  Scenario Outline: Move to My Vudu page
-    Given I have a camera "<url>"
-    And I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    And I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I go to home page
@@ -39,8 +39,8 @@ Feature: menu page navigation
 
 @free
   Scenario Outline: Move to free page
-    Given I have a camera "<url>"
-    And I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    And I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I go to home page
@@ -52,8 +52,8 @@ Feature: menu page navigation
 
 @movies
   Scenario Outline: Move to Movies page
-    Given I have a camera "<url>"
-    And I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    And I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I go to home page
@@ -65,8 +65,8 @@ Feature: menu page navigation
 
 @tv
    Scenario Outline: Move to TV page
-    Given I have a camera "<url>"
-    And I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    And I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I go to home page
@@ -78,8 +78,8 @@ Feature: menu page navigation
 
 @search
   Scenario Outline: Move to Search page
-    Given I have a camera "<url>"
-    And I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    And I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I go to home page
@@ -91,8 +91,8 @@ Feature: menu page navigation
 
 @settings
   Scenario Outline: Move to Settings page
-    Given I have a camera "<url>"
-    And I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    And I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I go to home page

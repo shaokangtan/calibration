@@ -1,8 +1,8 @@
 Feature: settings page
 
   Scenario Outline: Check out the settings page
-    Given I have a camera "<url>"
-    And I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    And I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I navigate to "Settings" on the menu page

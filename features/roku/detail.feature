@@ -2,8 +2,8 @@ Feature: detail page
 
 @rent_buy
   Scenario Outline: Check out rent and buy on the detail page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I navigate to "Movies" on the menu page
@@ -19,8 +19,8 @@ Feature: detail page
 
 @watch_trailer
   Scenario Outline: Check out watch trailer on the detail page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I navigate to "Movies" on the menu page
@@ -35,8 +35,8 @@ Feature: detail page
 
 @watch_free
   Scenario Outline: Check out watch free on the detail page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I navigate to "Free" on the menu page
@@ -50,8 +50,8 @@ Feature: detail page
 
 @add_to_list
   Scenario Outline: Check out add to list on the detail page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I navigate to "Free" on the menu page
@@ -65,8 +65,8 @@ Feature: detail page
 
 @rate
   Scenario Outline: Check out chapter grid the detail page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I navigate to "Movies" on the menu page

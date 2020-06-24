@@ -2,8 +2,8 @@ Feature: serch page
 
 @search_verify
   Scenario Outline: Check out search on the search page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     And I launch Vudu apps
     When I navigate to "Search" on the menu page
@@ -17,8 +17,8 @@ Feature: serch page
 
 @suggestion_verify
   Scenario Outline: Check out suggestion on the search page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     And I launch Vudu apps
     When I navigate to "Search" on the menu page
@@ -31,8 +31,8 @@ Feature: serch page
 
 @search_verify_play
   Scenario Outline: Check out search on the search page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     And I launch Vudu apps
     When I navigate to "Search" on the menu page

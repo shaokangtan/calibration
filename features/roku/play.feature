@@ -2,8 +2,8 @@ Feature: play page
 
 @trigger_mode
   Scenario Outline: Check out trigger modes on the playback page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     # play a free movie
@@ -39,8 +39,8 @@ Feature: play page
 
 @soft_key_back
     Scenario Outline: Check out back soft key on the playback page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     ## play a free movie
@@ -64,8 +64,8 @@ Feature: play page
 
 @soft_key_replay
  Scenario Outline: Check out replay soft key on the playback page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     ## play a free movie
@@ -90,8 +90,8 @@ Feature: play page
 
 @soft_key_rewind
  Scenario Outline: Check out rewind soft key on the playback page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     ## play a free movie
@@ -114,8 +114,8 @@ Feature: play page
 
 @soft_key_fastforward
  Scenario Outline: Check out fastforward soft key on the playback page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I navigate to "Free" on the menu page
@@ -138,8 +138,8 @@ Feature: play page
 
 @soft_key_all
  Scenario Outline: Check out all soft key on the playback page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I navigate to "Free" on the menu page

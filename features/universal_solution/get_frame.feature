@@ -1,7 +1,7 @@
 Feature: Get Frame
 
   Scenario Outline: Check out camera server frame capture
-    Given I have a camera "<url>"
+    Given I have a camera
     When I save a frame as "<file>"
     Then I can verify the frame "<file>" is valid
     Examples:

@@ -2,8 +2,8 @@ Feature: sign in/out
 
 @sign_out
   Scenario Outline: Check out sign out
-    Given I have a camera "<url>"
-    And I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    And I have a Roku with "<vudu>" app installed
     And I am already on the home menu page
     When I navigate to "Settings" on the menu page
     And I select "My Account" on the settings page
@@ -15,8 +15,8 @@ Feature: sign in/out
 
 @sign_in
 Scenario Outline: Check out sign in
-    Given I have a camera "<url>"
-    And I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    And I have a Roku with "<vudu>" app installed
     And I am already on the home menu page
     When I navigate to "Settings" on the menu page
     And I select "My Account" on the settings page

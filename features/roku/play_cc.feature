@@ -2,8 +2,8 @@ Feature: play page cc
 
 @cc_off
   Scenario Outline: Check out close cation off the playback page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I navigate to "Free" on the menu page
@@ -20,8 +20,8 @@ Feature: play page cc
 
 @cc_on
   Scenario Outline: Check out close cation on the playback page
-    Given I have a camera "<url>"
-    when I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    when I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I navigate to "Free" on the menu page

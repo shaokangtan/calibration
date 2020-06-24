@@ -1,8 +1,8 @@
 Feature: free movie
 
   Scenario Outline: Check out the free page
-    Given I have a camera "<url>"
-    Given I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    Given I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I navigate to "Free" on the menu page
@@ -17,8 +17,8 @@ Feature: free movie
 
 
   Scenario Outline: Check out the free page
-    Given I have a camera "<url>"
-    Given I have a Roku "<roku_url>" with "<vudu>" app installed
+    Given I have a camera
+    Given I have a Roku with "<vudu>" app installed
     And I select Roku home button
     When I launch Vudu apps
     And I navigate to "Free" on the menu page

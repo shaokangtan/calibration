@@ -36,12 +36,12 @@ def index():
 def start_live(address, timestamp, frame_rate):
     debug(f"=== rest api:get_live at {address}, timestamp: {timestamp} ===")
     if eval(timestamp) == 1:
-        ffmpeg = "ffmpeg -f {device} -framerate 30 -video_size 1280x720 -i '{camera}:none' -vcodec libx264 " \
+        ffmpeg = "ffmpeg -f {device} -framerate 30 -video_size 1280x720 -i {camera} -vcodec libx264 " \
                  "-preset ultrafast -tune zerolatency -pix_fmt yuv422p " \
                  "-vf drawtext=\"fontfile=/System/Library/Fonts/NewYork.ttf: text=\"{text}\": fontcolor=white: fontsize=36: x=(w-text_w)/2: y=(h-text_h)/2\" " \
                  "-r {rate} -f mpegts udp://{addr}".format(device= config.INPUT_DEVICE, camera=config.CAMERA_ID, text="%\{gmtime\}", rate=frame_rate, addr=address)
     else:
-        ffmpeg = "ffmpeg -f {device} -framerate 30 -video_size 1280x720 -i '{camera}:none' -vcodec libx264 " \
+        ffmpeg = "ffmpeg -f {device} -framerate 30 -video_size 1280x720 -i {camera} -vcodec libx264 " \
                  "-preset ultrafast -tune zerolatency -pix_fmt yuv422p " \
                  "-r {rate} -f mpegts udp://{addr}".format(device=config.INPUT_DEVICE, camera=config.CAMERA_ID, rate=frame_rate, addr=address)
 
@@ -78,6 +78,8 @@ def get_frame():
     CAMERA_ID = 0
 
     cap = cv2.VideoCapture(int(CAMERA_ID))
+    cap.set(3, 1280)
+    cap.set(4, 720)
     ret, _frame = cap.read()
     if _frame is None:
         debug(f"Error: fail to get_frame, try again")
@@ -185,4 +187,5 @@ app.debug = True
 print("start app")
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port="33")
+    app.run(host='192.168.8.152', port="33")
+    # app.run(host='0.0.0.0', port="33")

@@ -564,7 +564,11 @@ class CalibrationView(QMainWindow):
                 #     break
             # Break the loop
             else:
-                break
+                # break
+                print(f"warning: frames {self.current_frame} is bad")
+                self.current_frame += 1
+                if self.current_frame >= self.total_frames:
+                    break
             QtGui.QGuiApplication.processEvents()
             if time.time() > start + 10:
                 print(f"{frames / (time.time() - start)} fp/s")

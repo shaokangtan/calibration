@@ -2,7 +2,7 @@
 # camera id and input device will be based on the camera server's platform. currently, we support Windows and Mac OS.
 CAMERA_IP = "192.168.8.152:33"
 ROKU_IP = "192.168.8.201:8060"
-
+CV2_CAMERA_ID = 1
 import platform
 
 system = platform.system()

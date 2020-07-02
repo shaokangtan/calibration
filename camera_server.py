@@ -74,10 +74,9 @@ def stop_live():
 # capture new frame
 @app.route('/get_frame')
 def get_frame():
-    debug("=== rest api:get_frame ===")
-    CAMERA_ID = 0
+    debug("=== rest api:get_frame from cv2.VideoCapture:{config.CV2_CAMERA_ID}===")
 
-    cap = cv2.VideoCapture(int(CAMERA_ID))
+    cap = cv2.VideoCapture(int(config.CV2_CAMERA_ID))
     cap.set(3, 1280)
     cap.set(4, 720)
     ret, _frame = cap.read()

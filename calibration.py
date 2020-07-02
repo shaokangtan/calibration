@@ -63,7 +63,8 @@ class CalibrationView(QMainWindow):
         self.DEF_TEMPLATE_SEARCH_METHOD = 'cv2.TM_CCORR_NORMED'
 
         # self.DEF_RC_URL = "http://192.168.8.19:33" # remote
-        self.DEF_RC_URL = "http://0.0.0.0:33"  # local
+        import config
+        self.DEF_RC_URL = "http://" + config.CAMERA_IP # local
         self.DEF_STREAM_PORT = "1000"
         self.DEF_STREAM_FRAME_RATE = "30"
         self.DEF_RC_FRAME_PATH = "_frame.png"

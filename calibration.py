@@ -1252,13 +1252,13 @@ if __name__ == '__main__':
         print("error: no template found in {}".format(template_file))
         exit(2)
 
-    settings_file = "./settings.json"
-    with open(settings_file) as f:
-        data = json.load(f)
+    # settings_file = "./settings.json"
+    # with open(settings_file) as f:
+    #     data = json.load(f)
 
-    print(f"device id: {data['device_id']}, user email:{data['user_email']}, user password:{data['user_password']} ")
-    for page, value in data["pages"].items():
-        print(f"{page}:{value}")
+    # print(f"device id: {data['device_id']}, user email:{data['user_email']}, user password:{data['user_password']} ")
+    # for page, value in data["pages"].items():
+    #     print(f"{page}:{value}")
 
     app = QtGui.QApplication([])
 

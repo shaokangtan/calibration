@@ -12,6 +12,7 @@ Werkzeug==0.15
 # for calibration tool, you will need additional below plug-ins
 pyqtgraph
 pyqt5
+# PyQt5==5.9.2 on Ubuntu 16.04.1
 pytesseract
 imutils
 colormath

@@ -186,5 +186,7 @@ app.debug = True
 print("start app")
 
 if __name__ == "__main__":
-    app.run(host='192.168.8.152', port="33")
+    ip, port = config.CAMERA_IP.split(':')
+    print(f"camera ip:{ip}, port:{port}")
+    app.run(host=ip, port=port)
     # app.run(host='0.0.0.0', port="33")

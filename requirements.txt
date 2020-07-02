@@ -8,7 +8,7 @@ requests
 flask
 flask_extension
 Flask_Session
-Werkzeug==0.15
+Werkzeug==0.15.3
 # for calibration tool, you will need additional below plug-ins
 pyqtgraph
 pyqt5

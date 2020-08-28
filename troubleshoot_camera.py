@@ -1,4 +1,6 @@
 from lib import camera_lib
+from config import CAMERA_IP
+import os
 import time
 import socket
 import subprocess
@@ -6,13 +8,18 @@ from lib.helper import debug
 
 if __name__ == "__main__":
    # URL is your camera URL including port
-   # #URL = 'http://localhost:33'
-   URL = 'http://0.0.0.0:33'
+   URL = 'http://' + CAMERA_IP
+   # URL = 'http://localhost:33'
+   # URL = 'http://0.0.0.0:33'
    # status = get_frame(URL, path = 'output/get_frame.png')
    cam = camera_lib.Camera()
    assert  200 == cam.allocate_camera(URL), "alloc camera fail"
+   if not os.path.exists('output'):
+      os.makedirs('output')
    assert  200 == cam._frame(path = 'output/_frame.png')
-   assert  200 ==  cam._frame(path = 'output/_frame.png')
+   assert  200 ==  cam._frame(path = 'output/_frame1.png')
+   import filecmp
+   assert filecmp.cmp('output/_frame.png', 'output/_frame1.png') is True
    hostname = socket.gethostname()
    IPAddr = socket.gethostbyname(hostname)
    debug(f"=== start ffplay ===")

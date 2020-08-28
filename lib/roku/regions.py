@@ -6,7 +6,7 @@ REGION_PLAYBACK_PAGE_TITLE = Region(x=0, y=0, right=1280, bottom=90)
 REGION_CHAPTER_GRID = Region(115, 133, 1161, 577)
 
 # detail page regions
-REGION_DETAIL_BUTTONS = Region(80, 420, 330, 700)
+REGION_DETAIL_BUTTONS = Region(20, 420, 330, 700)
 REGION_DETAILS_PAGE_TEXT = Region(x=316, y=109, right=1210, bottom=650)
 REGION_DETAILS_PAGE_TITLE = Region(x=316, y=109, right=1180, bottom=167)
 REGION_DETAILS_PAGE_TITLE1 = Region(x=316, y=149, right=1180, bottom=196)

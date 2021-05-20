@@ -24,3 +24,6 @@ elif system == 'Linux':
     INPUT_DEVICE = "avfoundation"
 else:
     assert False, "platform not supported"
+
+CAMERA_WIDTH = 1280
+CAMERA_HEIGHT = 720

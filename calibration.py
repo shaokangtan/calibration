@@ -1,3 +1,8 @@
+'''
+Known issues:
+1. load video contain worng path
+2. video total frame count is incorrect sometimes
+'''
 import sys
 import cv2
 import pyqtgraph as pg
@@ -19,6 +24,7 @@ import glob
 import ntpath
 import json
 import socket
+import config
 
 import time
 from lib.vudu_image import comp_rgb, search_corners, match, ocr, init_deskew, run_deskew, Region
@@ -44,6 +50,7 @@ class MyImageItem(pg.ImageItem):
 class CalibrationView(QMainWindow):
     def __init__(self, pages, templates, parent=None, title=None, verbose=False):
         super(QMainWindow, self).__init__(parent)
+        self.cv2_version_major = int(cv2.__version__.split('.')[0])
         if len(pages) == 0 or len(templates) == 0:
             print("error: no pages/templates loaded")
             return None
@@ -280,6 +287,7 @@ class CalibrationView(QMainWindow):
         self.btn_rc_get_frame.clicked.connect(self.on_btn_rc_get_frame)
         self.btn_rc_start_video.clicked.connect(self.on_btn_rc_start_video)
         self.btn_rc_stop_video.clicked.connect(self.on_btn_rc_stop_video)
+
         self.btn_save_frame.clicked.connect(self.on_btn_save_frame)
 
 
@@ -347,11 +355,16 @@ class CalibrationView(QMainWindow):
         self.cb_video_capture = QComboBox()
         self.cb_video_capture.addItem("0")
         self.cb_video_capture.addItem("1")
+        self.cb_video_capture.addItem("2")
+        self.cb_video_capture.addItem("3")
         self.cb_video_capture.addItem("udp://127.0.0.1:12345")
         self.cb_video_capture.addItem("udp://192.168.8.19:12345")
         self.cb_video_capture.addItem("udp://192.168.8.3:12345")
         self.btn_start_video = QPushButton('Start/Pause video')
         self.btn_stop_video = QPushButton('Stop video')
+        self.btn_fwd_one_frame_video = QPushButton('fwd one frame')
+        self.btn_fwd_one_frame_video.setEnabled(False)
+
 
         self.btn_start_camera = QPushButton('Start camera')
         self.btn_stop_camera = QPushButton('Stop camera')
@@ -364,6 +377,7 @@ class CalibrationView(QMainWindow):
         self.cb_video_capture.currentIndexChanged.connect(self.on_video_capture_change)
         self.btn_start_video.clicked.connect(self.on_btn_start_video)
         self.btn_stop_video.clicked.connect(self.on_btn_stop_video)
+        self.btn_fwd_one_frame_video.clicked.connect(self.on_btn_fwd_one_frame_video)
         self.btn_start_camera.clicked.connect(self.on_btn_start_camera)
         self.btn_stop_camera.clicked.connect(self.on_btn_stop_camera)
         self.btn_search.clicked.connect(self.on_btn_search)
@@ -406,10 +420,14 @@ class CalibrationView(QMainWindow):
         self.dk_control.addWidget(self.label_video, row=5, col=0)
         self.dk_control.addWidget(self.cb_video, row=5, col=1)
         self.dk_control.addWidget(self.btn_load_videos, row=5, col=2)
+        self.cb_apply_template_search_to_video = QCheckBox('search template on video')
+        self.dk_control.addWidget(self.cb_apply_template_search_to_video, row=5, col=3)
+
 
         self.dk_control.addWidget(self.frame_slider, row=6, col=0, colspan=2)
         self.dk_control.addWidget(self.btn_start_video, row=6, col=2)
         self.dk_control.addWidget(self.btn_stop_video, row=6, col=3)
+        self.dk_control.addWidget(self.btn_fwd_one_frame_video, row=6, col=4)
 
         self.dk_control.addWidget(self.label_video_capture, row=7, col=0)
         self.dk_control.addWidget(self.cb_video_capture, row=7, col=1)
@@ -428,6 +446,7 @@ class CalibrationView(QMainWindow):
 
     def on_btn_start_video(self):
         # self.sim(calculate=False)
+        self.fwd_one_frame = False
         self.play_video()
 
     def on_btn_start_camera(self):
@@ -438,6 +457,14 @@ class CalibrationView(QMainWindow):
     def on_btn_stop_video(self):
         self.start_streaming = False
         self.pause_video = False
+        self.fwd_one_frame = False
+        self.btn_fwd_one_frame_video.setEnabled(False)
+
+
+    def on_btn_fwd_one_frame_video(self):
+        if self.start_streaming is True:
+            self.fwd_one_frame = True
+            self.play_video()
 
     def on_btn_stop_camera(self):
         self.start_streaming = False
@@ -454,6 +481,21 @@ class CalibrationView(QMainWindow):
         else:
             # gpCam = GoProCamera.GoPro()
             cap = cv2.VideoCapture(camera)
+        cv2_version_major = int(cv2.__version__.split('.')[0])
+        if cv2_version_major > 3:
+            width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+            height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+            print("width:{}, height:{}".format(width, height))
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
+        else:  # before 3.0
+            width = cap.get(cv2.CV_CAP_PROP_FRAME_WIDTH)
+            height = cap.get(cv2.CV_CAP_PROP_FRAME_HEIGHT)
+            print("width:{}, height:{}".format(width, height))
+            cap.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
+            cap.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
+        apply_template_search = self.cb_apply_template_search_to_video.isChecked()
+
         frames = 0
         start = time.time()
         # frame control for player
@@ -475,6 +517,9 @@ class CalibrationView(QMainWindow):
 
             # if cv2.waitKey(1) & 0xFF == ord('q'):
             #     break
+            if apply_template_search is True:
+                self.template_matching(self.cb_template.currentText())
+
         cap.release()
         cv2.destroyAllWindows()
         print(f"{frames / (time.time() - start)} fp/s")
@@ -486,6 +531,7 @@ class CalibrationView(QMainWindow):
         cap = cv2.VideoCapture(self.cb_video.currentText())
         if (cap.isOpened() is False):
             print("Error opening video stream or file")
+        apply_template_search = self.cb_apply_template_search_to_video.isChecked()
 
         # Read until video is completed
         frames = 0
@@ -510,6 +556,8 @@ class CalibrationView(QMainWindow):
                 # Press Q on keyboard to  exit
                 if cv2.waitKey(25) & 0xFF == ord('q'):
                     break
+                if apply_template_search is True:
+                    self.template_matching(self.cb_template.currentText())
             # Break the loop
             else:
                 break
@@ -524,15 +572,27 @@ class CalibrationView(QMainWindow):
         if self.start_streaming is True:
             if self.pause_video is False:
                 self.pause_video = True
+                self.btn_fwd_one_frame_video.setEnabled(True)
                 print(f"pause video")
                 return
+            elif self.fwd_one_frame is True:
+                print(f"foward video one frame")
             else:
                 # resume video
                 self.pause_video = False
+                self.btn_fwd_one_frame_video.setEnabled(False)
                 print(f"resume video")
         else:
             self.start_streaming = True
             self.cap = cv2.VideoCapture(self.cb_video.currentText())
+            if self.cv2_version_major >=3:
+                fps = self.cap.get(cv2.CAP_PROP_FPS)
+            else:
+                # OpenCV2 version 2 used "CV_CAP_PROP_FPS"
+                fps = self.cap.get(cv2.CV_CAP_PROP_FPS)
+            frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            duration = frame_count / fps
+
             if (self.cap.isOpened() is False):
                 print("Error opening video stream or file")
             self.total_frames = self.cap.get(7)
@@ -541,6 +601,7 @@ class CalibrationView(QMainWindow):
             self.frame_slider.set_max(self.total_frames)
             self.frame_slider.position(self.current_frame)
             # self.frame_update()
+        apply_template_search = self.cb_apply_template_search_to_video.isChecked()
 
         # Read until video is completed
         frames = 0
@@ -548,10 +609,11 @@ class CalibrationView(QMainWindow):
         if apply_deskewed_screen is True:
             self.PerspectiveTransform = None
         start = time.time()
-        while self.cap.isOpened() and self.start_streaming is True and self.pause_video is False:
+        while self.cap.isOpened() and self.start_streaming is True and (self.pause_video is False or self.fwd_one_frame is True):
             # Capture frame-by-frame
-            ret, self.frame = self.cap.read()
+            ret, frame = self.cap.read()
             if ret is True:
+                self.frame = frame
                 frames += 1
                 self.current_frame += 1
                 self.frame_slider.position(self.current_frame)
@@ -559,7 +621,8 @@ class CalibrationView(QMainWindow):
                     self.on_btn_deskew()
                 else:
                     self.image_item_page.setImage(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB))
-
+                if apply_template_search is True:
+                    self.template_matching(self.cb_template.currentText())
                 # Press Q on keyboard to exit
                 # if cv2.waitKey(25) & 0xFF == ord('q'):
                 #     break
@@ -568,6 +631,7 @@ class CalibrationView(QMainWindow):
                 # break
                 print(f"warning: frames {self.current_frame} is bad")
                 self.current_frame += 1
+                self.pause_video = True # pause video on bad frame or last frame
                 if self.current_frame >= self.total_frames:
                     break
             QtGui.QGuiApplication.processEvents()
@@ -575,7 +639,8 @@ class CalibrationView(QMainWindow):
                 print(f"{frames / (time.time() - start)} fp/s")
                 start = time.time()
                 frames = 0
-
+            if self.fwd_one_frame is True:
+                return
         print(f"{frames / (time.time() - start)} fp/s")
         if self.pause_video is False:
             # When everything done, release the video capture object
@@ -664,7 +729,7 @@ class CalibrationView(QMainWindow):
                 self.videos.append(fname)
 
     def on_load_pages(self):
-        fnames = QFileDialog.getOpenFileNames(self, '=Load pages', './', "Image files (*.png;*.jpg)")
+        fnames = QFileDialog.getOpenFileNames(self, 'Load pages', './', "Image files (*.png *.jpg)")
         print(f"load page: {fnames}")
         if fnames[0] != '':
             for fname in fnames[0]:
@@ -674,7 +739,7 @@ class CalibrationView(QMainWindow):
             self.cb_page.setCurrentIndex(len(self.pages) - 1)
 
     def on_load_templates(self):
-        fnames = QFileDialog.getOpenFileNames(self, '=Load templates', './', "Image files (*.png;*.jpg)")
+        fnames = QFileDialog.getOpenFileNames(self, 'Load templates', './', "Image files (*.png *.jpg)") #Images (*.png *.xpm .jpg);;Text files (.txt);;XML files (*.xml)
         print(f"load template: {fnames}")
         if fnames[0] != '':
             for fname in fnames[0]:
@@ -702,13 +767,16 @@ class CalibrationView(QMainWindow):
         print("roi pos: {}".format(self.rect_roi.pos()))
         print("roi size: {}".format(self.rect_roi.size()))
 
-        im = Image.open(self.cb_page.currentText())
+        # im = Image.open(self.cb_page.currentText())
+        cv2_im = cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB)
+        im = Image.fromarray(cv2_im)
+        # im.show()
         dim = (
             int(self.rect_roi.pos()[0]), int(self.rect_roi.pos()[1]), int(self.rect_roi.pos()[0] + self.rect_roi.size()[0]),
             int(self.rect_roi.pos()[1] + self.rect_roi.size()[1]))
         region = im.crop(dim)
 
-        name = ntpath.basename(self.cb_page.currentText()).rstrip(".png")
+        name = "roi" # ntpath.basename(self.cb_page.currentText()).rstrip(".png")
         name = "{}_{}_{}_{}_{}.png".format(name,
                                            int(self.rect_roi.pos()[0]), int(self.rect_roi.pos()[1]),
                                            int(self.rect_roi.pos()[0] + self.rect_roi.size()[0]),
@@ -1030,7 +1098,7 @@ class CalibrationView(QMainWindow):
         match_result = match(img, template, Region(search_region[0], search_region[1], search_region[2], search_region[3]), match_parameter=(match_method, threshold,
                                                                             COLOR_DISTANCE_THRESHOLD,
                                                                             RGB_DIFFERENCE_THRESHOLD))
-
+        end = time.time()
         if match_result is None:
             pass
         else:
@@ -1063,8 +1131,8 @@ class CalibrationView(QMainWindow):
         if paint is True:
             self.image_item_page.setImage(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
             QtGui.QGuiApplication.processEvents()
-        print(f"match spent {(time.time() - start) * 1000} ms")
-
+        print(f"match spent {(end - start) * 1000} ms")
+        self.console.write(f", match spent {(end - start) * 1000} ms\n")
         return
 
     def on_btn_rc_alloc(self):
@@ -1263,7 +1331,7 @@ if __name__ == '__main__':
     app = QtGui.QApplication([])
 
     view = CalibrationView(pages=pages, templates=templates,
-                           title="Vudu Screen Capture calibration ver.{}. All rights reserved.".format(VERSION),
+                           title="Roku Screen Capture calibration ver.{}. All rights reserved.".format(VERSION),
                            verbose=verbose)
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         QtGui.QApplication.instance().exec_()

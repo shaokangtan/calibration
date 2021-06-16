@@ -16,7 +16,6 @@ from colormath.color_objects import sRGBColor, LabColor
 from colormath.color_conversions import convert_color
 from colormath.color_diff import delta_e_cie2000
 
-
 # compare the difference of two colors
 # return a list of four floats,
 # 1.  distance of two color in color spectrum space.
@@ -44,7 +43,12 @@ def comp_color_distance(rgb1, rgb2):
     # Convert from RGB to Lab Color Space
     color2_lab = convert_color(color2_rgb, LabColor)
     return delta_e_cie2000(color1_lab, color2_lab)
-
+'''
+1. match method
+2. threshold
+3. rgb error range
+4. color distance error range
+'''
 default_match_parameter =(-1, 0.80, 25.0, 50.0)
 
 def set_default_match_paramter(match_paramter):
